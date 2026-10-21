@@ -5,6 +5,8 @@ counts your curls, and shows the count as bright text on a black screen.
 Behind a two-way mirror the black is invisible, so only the numbers appear to
 float on the glass.
 
+![EasyWeight smart mirror concept](Images/easyweight_mirror_concept.png)
+
 
 ## How it works
 
