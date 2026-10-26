@@ -1,9 +1,10 @@
 """
-EasyWeight - bicep curl counter for the smart mirror HUD
+EasyWeight - rep counter for the smart mirror HUD
 
-Counts bicep curls from your webcam and shows the count as bright text on a
-black screen. Behind a mirror, black is invisible, so only the numbers
-appear to float on the glass.
+Counts bicep curls, lateral raises and overhead presses from your webcam (it
+recognizes which one you're doing) and shows the count as bright text on a
+black screen. Behind a mirror, black is invisible, so only the numbers appear
+to float on the glass.
 
 Setup (once):
     pip install -r requirements.txt
@@ -17,7 +18,7 @@ Run:
 
 Keys (also work on a Hebrew keyboard layout):
     F       fullscreen on/off
-    D       show/hide the camera with the skeleton (handy while testing)
+    D       show/hide the camera picture (handy while testing)
     R       reset the count
     Q, Esc  quit
 """
@@ -45,12 +46,25 @@ except ImportError:
     ImageFont = None
 
 # Tuning: adjust these if reps are missed or counted when they shouldn't be.
-# Press D while running to see your live elbow angles.
-DOWN_ANGLE = 150       # elbow angle that counts as "arm straight"
-UP_ANGLE = 50          # elbow angle that counts as "fully curled"
+# The terminal prints the top angle of every rep while running.
+CURL_DOWN_ANGLE = 150  # elbow angle that counts as "arm straight"
+CURL_UP_ANGLE = 50     # elbow angle that counts as "fully curled"
+RAISE_DOWN_ANGLE = 30  # shoulder angle (0 = arm hanging down, 90 = out level with
+                       # the shoulder) that counts as "arm down" in a lateral raise
+RAISE_UP_ANGLE = 75    # shoulder angle that counts as "arm raised"
+RAISE_MIN_ELBOW = 120  # a lateral raise keeps the elbow at least this straight,
+                       # so curls and drinking can't count as raises
+RAISE_MAX_ANGLE = 140  # and stays below this shoulder angle, so an overhead press can't
+PRESS_DOWN_HEIGHT = 0.5  # wrist height above the shoulder (in shoulder widths) that
+                         # counts as "weights at the shoulders" in an overhead press
+PRESS_UP_HEIGHT = 1.0    # wrist height above the shoulder that counts as "pressed overhead"
 MIN_VISIBILITY = 0.5   # ignore an arm when MediaPipe isn't confident it can see it
 SMOOTHING = 0.4        # 0-1: lower = steadier but slower to react
-AWAY_RESET_SECONDS = 60  # reset the count after nobody has been seen this long
+SET_IDLE_SECONDS = 8   # no new rep for this long = the set is over and rest starts
+MAX_REST_SECONDS = 180  # resting longer than this resets the count
+AWAY_RESET_SECONDS = 10  # reset the count after nobody has been seen this long
+DRINK_DISTANCE = 0.52  # a lift during rest where the wrist comes closer to the mouth
+                       # than this (in shoulder widths) is drinking, not a curl
 
 MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
              "pose_landmarker_{v}/float16/latest/pose_landmarker_{v}.task")
@@ -61,20 +75,19 @@ DEFAULT_SIZE = (1280, 720)
 
 # MediaPipe landmark numbers: shoulder, elbow, wrist (the person's own left/right)
 ARMS = {"left": (11, 13, 15), "right": (12, 14, 16)}
-SKELETON = [(11, 12), (11, 13), (13, 15), (12, 14), (14, 16), (11, 23), (12, 24),
-            (23, 24), (23, 25), (25, 27), (24, 26), (26, 28)]
 
 # Colors are BGR (OpenCV's order). Behind a two way mirror only bright colors
-# show through, so the HUD uses nothing darker than GRAY, and GRAY only for
-# things that are meant to look faded (an arm the camera can't see)
+# show through, so the HUD uses nothing darker than LIGHT_GRAY
 WHITE = (255, 255, 255)
 GREEN = (90, 255, 120)
 CYAN = (255, 210, 60)
 LIGHT_GRAY = (200, 200, 200)
-GRAY = (140, 140, 140)
 
-# Bold TrueType fonts, first one found wins. Thin strokes vanish behind the glass
+# Bold TrueType fonts, first one found wins. Thin strokes vanish behind the glass.
+# Inter Display (in the fonts folder, free under the SIL Open Font License) looks
+# like Apple's San Francisco font, which can't be used outside Apple's systems
 FONT_FILES = [
+    str(Path(__file__).resolve().parent / "fonts" / "InterDisplay-SemiBold.ttf"),
     "C:/Windows/Fonts/segoeuib.ttf",
     "C:/Windows/Fonts/arialbd.ttf",
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
@@ -143,6 +156,9 @@ def open_camera(index):
         if cap.isOpened():
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            # Uncompressed 720p is too much for USB (about 4 fps on many webcams),
+            # so ask for MJPG. It must come after the size or DirectShow ignores it
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
             return cap
         cap.release()
     return None
@@ -160,48 +176,249 @@ def angle_at(a, b, c):
     return math.degrees(math.acos(max(-1.0, min(1.0, cos))))
 
 
-def elbow_angle(landmarks, side, width, height):
-    """Elbow angle for one arm, or None if MediaPipe can't see that arm well"""
+def arm_points(landmarks, ids, width, height):
+    """Pixel positions of these landmarks, or None if MediaPipe can't see one of
+    them well. Pixels, so angles aren't squashed by the frame's shape"""
     points = []
-    for i in ARMS[side]:
+    for i in ids:
         lm = landmarks[i]
         if lm.visibility is not None and lm.visibility < MIN_VISIBILITY:
             return None
-        points.append((lm.x * width, lm.y * height))  # pixels, so the angle isn't squashed
-    return angle_at(*points)
+        points.append((lm.x * width, lm.y * height))
+    return points
+
+
+def elbow_angle(landmarks, side, width, height):
+    """Elbow angle for one arm (about 180 = straight), or None if it can't be seen"""
+    points = arm_points(landmarks, ARMS[side], width, height)
+    return angle_at(*points) if points else None
+
+
+def shoulder_angle(landmarks, side, width, height):
+    """How far the upper arm is raised out to the side: 0 = hanging straight down,
+    90 = level with the shoulder. Measured from straight down rather than from the
+    hip, so it works when the camera doesn't see the hips"""
+    points = arm_points(landmarks, ARMS[side][:2], width, height)
+    if not points:
+        return None
+    (sx, sy), elbow = points
+    return angle_at((sx, sy + 100), (sx, sy), elbow)
+
+
+def joint_height(landmarks, side, joint, width, height):
+    """How far a joint of the arm (1 = elbow, 2 = wrist, as in ARMS) is above the
+    shoulder, in shoulder widths (negative = below it). The press uses the wrist
+    height rather than an angle, because with the weights held in front the
+    wrist is above the shoulder at the bottom too"""
+    points = arm_points(landmarks, (ARMS[side][0], ARMS[side][joint]), width, height)
+    if not points:
+        return None
+    shoulders = math.dist(*((landmarks[i].x * width, landmarks[i].y * height) for i in (11, 12)))
+    if shoulders == 0:
+        return None
+    (_, shoulder_y), (_, joint_y) = points
+    return (shoulder_y - joint_y) / shoulders
+
+
+def mouth_distance(landmarks, side, width, height):
+    """How far the wrist is from the mouth, in shoulder widths (so it doesn't
+    matter how far the person stands from the camera). Drinking brings the hand
+    to the mouth, a curl stops near the shoulder. The face points aren't checked
+    for visibility because a bottle often covers the mouth, and MediaPipe still
+    places them well"""
+    p = lambda i: (landmarks[i].x * width, landmarks[i].y * height)
+    mouth_l, mouth_r = p(9), p(10)
+    mouth = ((mouth_l[0] + mouth_r[0]) / 2, (mouth_l[1] + mouth_r[1]) / 2)
+    shoulders = math.dist(p(11), p(12))
+    if shoulders == 0:
+        return None
+    return math.dist(p(ARMS[side][2]), mouth) / shoulders
 
 
 class ArmCounter:
-    """One arm: straight (above DOWN_ANGLE), then curled (below UP_ANGLE) = 1 rep"""
+    """One arm doing one exercise: the angle goes past down_angle, then past
+    up_angle = 1 rep. For a curl the elbow angle gets smaller on the way up, for
+    a lateral raise the shoulder angle gets bigger. For an overhead press the
+    "angle" is the wrist height, which also gets bigger"""
 
-    def __init__(self):
+    def __init__(self, name, down_angle, up_angle, measure="angle"):
+        self.name = name
+        self.measure = measure  # what the angle is, for the printout
+        self.down_angle, self.up_angle = down_angle, up_angle
+        self.sign = 1 if down_angle > up_angle else -1  # 1 = the angle shrinks on the way up
         self.reps = 0
-        self.angle = None      # smoothed elbow angle
-        self.stage = None      # "down" (arm straight) or "up" (curled)
+        self.angle = None      # smoothed angle
+        self.stage = None      # "down" or "up"
         self.visible = False
+        self.mouth = None      # wrist to mouth distance right now
+        self.closest = math.inf  # closest the wrist came to the mouth since the arm was down
+        self.top = None        # furthest up the angle got since the arm was down
+        # Highest the wrist and elbow got since the arm was down (joint_height).
+        # Only printed for now, to find what tells a curl from touching the face
+        self.wrist_top = self.elbow_top = -math.inf
 
-    def update(self, raw_angle):
-        """Feed one reading (or None). Returns True when this reading completes a rep"""
+    def update(self, raw_angle, mouth=None, form_ok=True, wrist=None, elbow=None):
+        """Feed one reading (or None), the mouth_distance, whether the arm's form
+        fits this exercise, and the wrist and elbow joint_height. Returns True
+        when this reading completes a rep"""
         self.visible = raw_angle is not None
+        self.mouth = mouth
         if raw_angle is None:
             return False
+        if mouth is not None:
+            self.closest = min(self.closest, mouth)
+        if wrist is not None:
+            self.wrist_top = max(self.wrist_top, wrist)
+        if elbow is not None:
+            self.elbow_top = max(self.elbow_top, elbow)
         if self.angle is None:
             self.angle = raw_angle
         else:
             self.angle += SMOOTHING * (raw_angle - self.angle)
-        if self.angle > DOWN_ANGLE:
+        if self.top is None or self.sign * (self.angle - self.top) < 0:
+            self.top = self.angle
+        if self.sign * (self.angle - self.down_angle) > 0:
+            if self.stage == "up":  # a lift just ended. Printed to help with tuning
+                top = f"{self.top:.0f}" if self.measure == "angle" else f"{self.top:.2f}"
+                print(f"{self.name}: top {self.measure} {top}, "
+                      f"wrist came {self.closest:.2f} from the mouth, "
+                      f"above shoulder: wrist up to {self.wrist_top:+.2f}, "
+                      f"elbow up to {self.elbow_top:+.2f}", flush=True)
             self.stage = "down"
-        elif self.angle < UP_ANGLE and self.stage == "down":
+            self.closest = math.inf
+            self.top = None
+            self.wrist_top = self.elbow_top = -math.inf
+        elif self.sign * (self.angle - self.up_angle) < 0 and self.stage == "down" and form_ok:
             self.stage = "up"
             self.reps += 1
             return True
         return False
 
     def progress(self):
-        """How far through the curl the arm is: 0 = straight, 1 = fully curled"""
+        """How far through the rep the arm is: 0 = down, 1 = all the way up"""
         if self.angle is None:
             return 0.0
-        return min(1.0, max(0.0, (DOWN_ANGLE - self.angle) / (DOWN_ANGLE - UP_ANGLE)))
+        done = (self.down_angle - self.angle) / (self.down_angle - self.up_angle)
+        return min(1.0, max(0.0, done))
+
+
+EXERCISES = {"curl": "BICEP CURLS", "raise": "LATERAL RAISES", "press": "OVERHEAD PRESS"}
+
+
+class Workout:
+    """Splits the reps into sets and knows which exercise each set is. The first
+    rep of a set decides the exercise, and only that exercise counts until the
+    set ends. No new rep for SET_IDLE_SECONDS means resting, and the first rep
+    after a rest starts the next set (which can be another exercise). A curl
+    during rest is held back until the arm straightens, so drinking water or
+    touching the face doesn't count"""
+
+    def __init__(self):
+        self.counters = {
+            "curl": {side: ArmCounter(f"{side} arm curl", CURL_DOWN_ANGLE, CURL_UP_ANGLE)
+                     for side in ARMS},
+            "raise": {side: ArmCounter(f"{side} arm raise", RAISE_DOWN_ANGLE, RAISE_UP_ANGLE)
+                      for side in ARMS},
+            "press": {side: ArmCounter(f"{side} arm press", PRESS_DOWN_HEIGHT, PRESS_UP_HEIGHT,
+                                       measure="height")
+                      for side in ARMS},
+        }
+        self.reset()
+
+    def arms(self):
+        """The (left, right) counters to show: the set's exercise, or before the
+        first rep, whichever exercise the arms are further into"""
+        if self.exercise:
+            pair = self.counters[self.exercise]
+        else:
+            pair = max(self.counters.values(),
+                       key=lambda p: max(c.progress() for c in p.values()))
+        return pair["left"], pair["right"]
+
+    def clear_reps(self):
+        for pair in self.counters.values():
+            for counter in pair.values():
+                counter.reps = 0
+
+    def set_reps(self):
+        return max(c.reps for c in self.counters[self.exercise].values())
+
+    def resting(self, now):
+        return self.last_rep is not None and now - self.last_rep > SET_IDLE_SECONDS
+
+    def rest_time(self, now):
+        """Seconds since the person stopped, counted from their last rep"""
+        return now - self.last_rep
+
+    def start_set(self, exercise, counter, now):
+        """counter's rep is the first rep of a set of exercise. Switching exercise
+        starts its sets from 1"""
+        self.set = self.prev_set + 1 if exercise == self.prev_exercise else 1
+        self.exercise = exercise
+        self.clear_reps()
+        counter.reps = 1
+        self.last_rep = now
+        self.pending = None
+        print(f"Set {self.set}: {EXERCISES[exercise].lower()}", flush=True)
+
+    def next_set(self, exercise, counter, now):
+        """After a rest: counter's rep starts the next set"""
+        self.prev_exercise, self.prev_set = self.exercise, self.set
+        self.start_set(exercise, counter, now)
+
+    def add_rep(self, now, exercise, counter):
+        """Call after counter completed a rep of exercise. Returns True if it counts
+        right away. A curl during rest is held back until check_pending knows it
+        isn't drinking (a raise or a press can't be drinking)"""
+        if self.resting(now):
+            if exercise == "curl":
+                counter.reps -= 1
+                if self.pending is None:
+                    self.pending = counter
+                return False
+            self.next_set(exercise, counter, now)
+            return True
+        if self.exercise is None:
+            self.start_set(exercise, counter, now)
+            return True
+        if exercise == self.exercise:
+            self.last_rep = now
+            return True
+        if self.exercise == "curl" and exercise == "press" and self.set_reps() < 2:
+            # The "curl" was lifting the weights to the shoulders for a press
+            self.start_set(exercise, counter, now)
+            return True
+        counter.reps -= 1  # not the exercise this set is doing
+        return False
+
+    def check_pending(self, now):
+        """Call every frame. Returns True when a held back curl turned out to be a
+        real rep and started the next set. There's no time limit: people often
+        lift a bottle to the chest and pause before drinking"""
+        counter = self.pending
+        if counter is None:
+            return False
+        if counter.closest < DRINK_DISTANCE:
+            print(f"Lift during rest: wrist came {counter.closest:.2f} from the mouth "
+                  f"(drinking below {DRINK_DISTANCE}) -> drinking, ignored", flush=True)
+            self.pending = None
+            return False
+        # Straight again without reaching the mouth. Checked after the line above
+        # every frame, so a lift that came near the mouth never gets here
+        if counter.stage == "down":
+            print(f"Lift during rest: wrist stayed {DRINK_DISTANCE}+ from the mouth "
+                  f"-> not drinking", flush=True)
+            self.next_set("curl", counter, now)
+            return True
+        return False
+
+    def reset(self):
+        self.clear_reps()
+        self.exercise = None   # "curl", "raise" or "press", None before the first rep
+        self.set = 1
+        self.prev_exercise, self.prev_set = None, 0  # the set before this one
+        self.last_rep = None   # time of the latest rep, None before the first one
+        self.pending = None    # counter of a curl during rest that might be drinking
 
 
 # Drawing
@@ -220,7 +437,8 @@ def load_font(size):
 
 
 def add_text(texts, text, x, y, size, color, align="center"):
-    """Queue text centered on (x, y), or starting at x when align="left". size is in pixels"""
+    """Queue text centered on (x, y), or starting at x when align="left", or ending
+    at x when align="right". size is in pixels"""
     texts.append((text, x, y, max(8, round(size)), color, align))
 
 
@@ -233,57 +451,52 @@ def draw_texts(canvas, texts):
         draw = ImageDraw.Draw(img)
         for (text, x, y, _, color, align), font in zip(texts, fonts):
             draw.text((x, y), text, font=font, fill=color,
-                      anchor="mm" if align == "center" else "lm")
+                      anchor={"center": "mm", "left": "lm", "right": "rm"}[align])
         canvas[:] = np.asarray(img)
         return
     for text, x, y, size, color, align in texts:
         scale, thickness = size / 32, max(1, round(size / 16))
         (w, h), _ = cv2.getTextSize(text, FALLBACK_FONT, scale, thickness)
-        left = x - w / 2 if align == "center" else x
+        left = {"center": x - w / 2, "left": x, "right": x - w}[align]
         cv2.putText(canvas, text, (int(left), int(y + h / 2)), FALLBACK_FONT, scale,
                     color, thickness, cv2.LINE_AA)
 
 
-def draw_hud(canvas, texts, left, right, person_found, flash, show_hints):
+def draw_hud(canvas, texts, workout, now, flash):
     """Draw the mirror display. Everything scales with the window size
 
-    The middle of the screen stays empty so your reflection isn't covered: the
-    count is at the top, the arm bars run along the edges, messages at the bottom
+    Only the time and date (top left) and the exercise and the count (or the
+    rest timer) at the top, so the rest of the glass stays clear for your
+    reflection
     """
     H, W = canvas.shape[:2]
     s = min(W / 1280, H / 720)
-    t = lambda base: max(1, round(base * s))  # line thickness
     cx = W / 2
+    left, right = workout.arms()
 
-    add_text(texts, "BICEP CURLS", cx, H * 0.07, 30 * s, LIGHT_GRAY)
-    reps = max(left.reps, right.reps)
-    add_text(texts, str(reps), cx, H * 0.24, 190 * s, GREEN if flash else WHITE)
-    add_text(texts, "REPS", cx, H * 0.24 + 120 * s, 30 * s, LIGHT_GRAY)
+    clock = time.localtime()
+    add_text(texts, time.strftime("%H:%M", clock), 40 * s, H * 0.07, 40 * s, WHITE,
+             align="left")
+    add_text(texts, time.strftime("%d/%m/%Y", clock), 40 * s, H * 0.07 + 40 * s, 24 * s,
+             LIGHT_GRAY, align="left")
+    add_text(texts, "EasyWeight", W - 40 * s, H * 0.07, 34 * s, CYAN, align="right")
 
-    # One progress bar per arm, along the edges. The left arm's bar is on the
-    # left, where you see that arm in the mirror. Green means the rep counted:
-    # straighten to reset. An arm the camera can't see gets no bar at all
-    bar_w = max(16, int(40 * s))
-    top, bottom = int(H * 0.30), int(H * 0.80)
-    for counter, x, label in ((left, int(W * 0.05), "L"),
-                              (right, int(W * 0.95) - bar_w, "R")):
-        if counter.visible:
-            cv2.rectangle(canvas, (x, top), (x + bar_w, bottom), LIGHT_GRAY, t(3))
-            fill_top = int(bottom - (bottom - top) * counter.progress())
-            color = GREEN if counter.stage == "up" else CYAN
-            cv2.rectangle(canvas, (x, fill_top), (x + bar_w, bottom), color, -1)
-        add_text(texts, f"{label} {counter.reps}", x + bar_w / 2, bottom + 40 * s, 34 * s,
-                 WHITE if counter.visible else GRAY)
-
-    if not person_found:
-        add_text(texts, "Step in front of the mirror", cx, H * 0.90, 34 * s, LIGHT_GRAY)
-    if show_hints:
-        add_text(texts, "F fullscreen    D camera    R reset    Q quit",
-                 cx, H * 0.96, 20 * s, GRAY)
+    if workout.exercise:  # no name until the first rep shows which exercise it is
+        add_text(texts, EXERCISES[workout.exercise], cx, H * 0.07, 30 * s, LIGHT_GRAY)
+    if workout.resting(now):
+        minutes, seconds = divmod(int(workout.rest_time(now)), 60)
+        add_text(texts, f"{minutes}:{seconds:02d}", cx, H * 0.24, 190 * s, CYAN)
+        add_text(texts, f"REST - SET {workout.set} DONE", cx, H * 0.24 + 120 * s,
+                 30 * s, LIGHT_GRAY)
+    else:
+        reps = max(left.reps, right.reps)
+        add_text(texts, str(reps), cx, H * 0.24, 190 * s, GREEN if flash else WHITE)
+        add_text(texts, f"SET {workout.set}", cx, H * 0.24 + 120 * s,
+                 30 * s, LIGHT_GRAY)
 
 
-def draw_camera(canvas, frame, landmarks):
-    """Paste the webcam image (mirrored and darkened) behind the HUD, with the skeleton"""
+def draw_camera(canvas, frame):
+    """Paste the webcam image (mirrored and darkened) behind the HUD"""
     H, W = canvas.shape[:2]
     fh, fw = frame.shape[:2]
     scale = min(W / fw, H / fh)
@@ -291,21 +504,7 @@ def draw_camera(canvas, frame, landmarks):
     x0, y0 = (W - dw) // 2, (H - dh) // 2
     view = cv2.resize(cv2.flip(frame, 1), (dw, dh))
     canvas[y0:y0 + dh, x0:x0 + dw] = cv2.convertScaleAbs(view, alpha=0.45)
-    if landmarks:
-        pts = [(int(x0 + (1 - lm.x) * dw), int(y0 + lm.y * dh)) for lm in landmarks]
-        for a, b in SKELETON:
-            cv2.line(canvas, pts[a], pts[b], WHITE, 2, cv2.LINE_AA)
-        for i in ARMS["left"] + ARMS["right"]:
-            cv2.circle(canvas, pts[i], 6, CYAN, -1, cv2.LINE_AA)
 
-
-def draw_debug_text(canvas, texts, left, right, fps):
-    H, W = canvas.shape[:2]
-    s = min(W / 1280, H / 720)
-    fmt = lambda c: f"{c.angle:.0f}" if c.visible and c.angle is not None else "--"
-    text = (f"elbow angle  L {fmt(left)}  R {fmt(right)}   "
-            f"(straight > {DOWN_ANGLE}, curled < {UP_ANGLE})   {fps:.0f} fps")
-    add_text(texts, text, 16 * s, H - 24 * s, 20 * s, LIGHT_GRAY, align="left")
 
 
 # Window helpers
@@ -340,7 +539,8 @@ def key_action(code):
 
 # Main loop
 def parse_args():
-    p = argparse.ArgumentParser(description="EasyWeight bicep curl counter")
+    p = argparse.ArgumentParser(
+        description="EasyWeight rep counter: bicep curls, lateral raises, overhead presses")
     p.add_argument("--camera", type=int, default=0,
                    help="webcam number (try 1 or 2 if 0 is the wrong camera)")
     p.add_argument("--model", choices=["lite", "full", "heavy"], default="full",
@@ -357,16 +557,16 @@ def main():
         sys.exit(f"Couldn't open webcam {args.camera}. "
                  "Is another app using it? You can also try --camera 1")
 
-    left, right = ArmCounter(), ArmCounter()
-    fullscreen, show_camera = args.fullscreen, False
-    flash_until, fps, failed_reads = 0.0, 0.0, 0
+    workout = Workout()
+    fullscreen, show_camera = args.fullscreen, True
+    flash_until, failed_reads = 0.0, 0
     last_seen = time.perf_counter()
 
     cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(WINDOW, *DEFAULT_SIZE)
     set_fullscreen(fullscreen)
 
-    start = last = time.perf_counter()
+    start = time.perf_counter()
     last_ts = -1
     try:
         with create_landmarker(model) as landmarker:
@@ -381,9 +581,6 @@ def main():
                 failed_reads = 0
 
                 now = time.perf_counter()
-                dt = max(now - last, 1e-6)
-                fps = 1 / dt if fps == 0 else 0.9 * fps + 0.1 / dt
-                last = now
 
                 # MediaPipe needs RGB images and strictly increasing timestamps
                 ts = max(int((now - start) * 1000), last_ts + 1)
@@ -394,26 +591,42 @@ def main():
                 landmarks = result.pose_landmarks[0] if result.pose_landmarks else None
 
                 h, w = frame.shape[:2]
-                for counter, side in ((left, "left"), (right, "right")):
-                    angle = elbow_angle(landmarks, side, w, h) if landmarks else None
-                    if counter.update(angle):
-                        flash_until = now + 0.35
+                # Every exercise is watched on both arms. A raise must keep the
+                # elbow fairly straight, so a curl or a drink can't count as one,
+                # and stay below shoulder RAISE_MAX_ANGLE, so a press can't either
+                for side in ARMS:
+                    elbow = elbow_angle(landmarks, side, w, h) if landmarks else None
+                    shoulder = shoulder_angle(landmarks, side, w, h) if landmarks else None
+                    wrist = joint_height(landmarks, side, 2, w, h) if landmarks else None
+                    elbow_up = joint_height(landmarks, side, 1, w, h) if landmarks else None
+                    mouth = mouth_distance(landmarks, side, w, h) if elbow is not None else None
+                    raise_ok = (elbow is not None and elbow > RAISE_MIN_ELBOW
+                                and shoulder is not None and shoulder < RAISE_MAX_ANGLE)
+                    for exercise, angle, form_ok in (("curl", elbow, True),
+                                                     ("raise", shoulder, raise_ok),
+                                                     ("press", wrist, True)):
+                        counter = workout.counters[exercise][side]
+                        if (counter.update(angle, mouth, form_ok, wrist, elbow_up)
+                                and workout.add_rep(now, exercise, counter)):
+                            flash_until = now + 0.35
+                if workout.check_pending(now):
+                    flash_until = now + 0.35
 
-                # Nobody in front of the mirror for a while: start fresh for the next person
+                # Nobody in front of the mirror for a while, or a rest that went
+                # on too long: start fresh
                 if landmarks:
                     last_seen = now
                 elif now - last_seen > AWAY_RESET_SECONDS:
-                    left.reps = right.reps = 0
+                    workout.reset()
+                if workout.resting(now) and workout.rest_time(now) > MAX_REST_SECONDS:
+                    workout.reset()
 
                 W, H = window_size()
                 canvas = np.zeros((H, W, 3), np.uint8)
                 texts = []
                 if show_camera:
-                    draw_camera(canvas, frame, landmarks)
-                draw_hud(canvas, texts, left, right, landmarks is not None,
-                         flash=now < flash_until, show_hints=not fullscreen)
-                if show_camera:
-                    draw_debug_text(canvas, texts, left, right, fps)
+                    draw_camera(canvas, frame)
+                draw_hud(canvas, texts, workout, now, flash=now < flash_until)
                 draw_texts(canvas, texts)
                 cv2.imshow(WINDOW, canvas)
 
@@ -426,7 +639,7 @@ def main():
                 elif action == "camera":
                     show_camera = not show_camera
                 elif action == "reset":
-                    left.reps = right.reps = 0
+                    workout.reset()
                 if window_closed():
                     break
     finally:
