@@ -24,10 +24,10 @@ each arm in three ways:
 
 All three exercises are watched all the time. The first rep of a set decides
 which exercise it is, its name appears at the top of the screen, and only that
-exercise is counted until the set ends. One exception: lifting the weights up
-to your shoulders before pressing looks like a curl, so a set that has only 1
-curl turns into an overhead press set when a press comes next. The camera has
-to see your hands at the top of the press. Each arm is counted separately, and the
+exercise is counted until the set ends. One exception: picking up the weights,
+or lifting them to your shoulders before pressing, looks like a curl, so a set
+that has only 1 curl turns into a lateral raise or overhead press set when one
+of those comes next. The camera has to see your hands at the top of the press. Each arm is counted separately, and the
 big number shows whichever arm has more reps.
 
 Only the time and date (top left), the exercise and the count (top middle) and
