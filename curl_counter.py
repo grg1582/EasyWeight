@@ -384,10 +384,11 @@ class Workout:
         if exercise == self.exercise:
             self.last_rep = now
             return True
-        if self.exercise == "curl" and self.set_reps() < 2:
-            # The "curl" was picking up the weights, or lifting them to the
-            # shoulders for a press. Only away from curls: lowering a press can
-            # look like a curl, so going back would make the set flip
+        if self.set_reps() < 2 and not (self.exercise == "press" and exercise == "curl"):
+            # One rep isn't enough to be sure: the first "curl" is often picking
+            # up the weights or lifting them to the shoulders for a press. But
+            # never from press to curl: lowering a press looks like a curl, so
+            # the set would flip back and forth and stay at 1 rep
             self.start_set(exercise, counter, now)
             return True
         counter.reps -= 1  # not the exercise this set is doing
