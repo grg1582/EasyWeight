@@ -1,3 +1,11 @@
+
+
+
+
+https://github.com/user-attachments/assets/91137fd0-7c6d-441a-8846-efb7e68ecccd
+
+
+
 # EasyWeight
 
 A rep counter for a smart mirror. It watches you through a webcam, recognizes
