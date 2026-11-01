@@ -7,6 +7,10 @@ shows the count as bright text on a black screen.
 Behind a two-way mirror the black is invisible, so only the numbers appear to
 float on the glass.
 
+https://github.com/user-attachments/assets/cbb6c348-219c-41a6-bf49-df96ef5d7411
+
+
+
 ![EasyWeight smart mirror concept](Images/easyweight_mirror_concept.png)
 
 
