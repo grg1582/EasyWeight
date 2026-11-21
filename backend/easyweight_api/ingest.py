@@ -46,7 +46,9 @@ def _one(db: Session, device: Device, event) -> EventResult:
         return EventResult(id=event.id, status="rejected", reason=str(e))
 
 
-def ingest(db: Session, device: Device, events) -> EventBatchResult:
+def ingest(db: Session, device: Device, events, commit: bool = True) -> EventBatchResult:
+    """Store the events and apply them. With commit=False the caller commits
+    (the demo fills its account in one transaction)"""
     ids = [event.id for event in events]
     stored = set(db.scalars(select(Event.id).where(Event.id.in_(ids)))) if ids else set()
     fresh, seen = [], set(stored)
@@ -77,7 +79,10 @@ def ingest(db: Session, device: Device, events) -> EventBatchResult:
     # When the mirror last got in touch (not when its events happened: an
     # offline backlog can be days old)
     device.last_seen_at = datetime.now(UTC)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     count = lambda s: sum(r.status == s for r in results)  # noqa: E731
     return EventBatchResult(applied=count("applied"), duplicates=count("duplicate"),
                             rejected=count("rejected"), results=results)

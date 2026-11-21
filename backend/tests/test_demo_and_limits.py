@@ -1,6 +1,9 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import delete, func, select
+from sqlalchemy.orm import Session
 
 from conftest import PASSWORD, sign_up
 from easyweight_api import demo, simulator
@@ -49,6 +52,33 @@ def test_demo_keeps_up_to_date(db):
     latest = max(w.started_at for w in db.query(Workout).filter_by(device_id=device.id))
     assert latest > now - timedelta(days=4)
     assert db.query(User).filter_by(email=user.email).count() == 1
+
+
+def test_two_first_visits_at_once(engine, monkeypatch):
+    """Both visitors get the demo, and there's still just one demo user.
+    This one commits for real (each visitor needs their own connection), so it
+    uses its own demo email and cleans up after itself"""
+    from easyweight_api.config import get_settings
+
+    email = "demo-race@easyweight.dev"
+    monkeypatch.setattr(get_settings(), "demo_email", email)
+    now = datetime.now(UTC)
+
+    def visit(_):
+        with Session(engine, expire_on_commit=False) as session:
+            return demo.demo_user(session, now).id
+
+    try:
+        with ThreadPoolExecutor(3) as pool:
+            ids = list(pool.map(visit, range(3)))
+        assert len(set(ids)) == 1
+        with Session(engine) as session:
+            assert session.scalar(select(func.count()).select_from(Device)
+                                  .where(Device.owner_id == ids[0])) == 1
+    finally:
+        with Session(engine) as session:
+            session.execute(delete(User).where(User.email == email))
+            session.commit()
 
 
 def test_demo_can_be_turned_off(client, monkeypatch):

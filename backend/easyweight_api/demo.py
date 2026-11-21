@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, status
 from pydantic import TypeAdapter
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 from . import simulator
@@ -24,6 +24,7 @@ from .schemas import DeviceEvent
 from .security import hash_token, new_token
 
 HISTORY_DAYS = 60
+DEMO_LOCK = 0x45570001  # any number no other code locks on
 KEEP_DAYS = 90
 _events = TypeAdapter(list[DeviceEvent])
 
@@ -44,6 +45,11 @@ def demo_user(db: Session, now: datetime | None = None) -> User:
     """The demo user, created if needed, with workouts up to `now`"""
     now = now or datetime.now(UTC)
     email = get_settings().demo_email
+    # Two visitors can open the demo at the same moment (say, the first two
+    # after a deploy). Take turns: without this lock both would create the demo
+    # user and one would fail. The lock is held until the commit below, and
+    # the second visitor then finds the user the first one made
+    db.execute(text("select pg_advisory_xact_lock(:key)"), {"key": DEMO_LOCK})
     user = db.scalar(select(User).where(User.email == email))
     if user is None:
         user = User(email=email, password_hash=hash_password(secrets.token_urlsafe(32)))
@@ -76,7 +82,7 @@ def top_up(db: Session, device: Device, now: datetime) -> int:
     events = simulator.history(first, now - timedelta(hours=1))
     batch = get_settings().max_events_per_request
     for i in range(0, len(events), batch):
-        ingest(db, device, _events.validate_python(events[i:i + batch]))
+        ingest(db, device, _events.validate_python(events[i:i + batch]), commit=False)
     return len(events)
 
 

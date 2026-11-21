@@ -106,7 +106,9 @@ test("one user can't see another user's workouts", async ({ page, request }) => 
 test("the demo shows a full dashboard and can't be changed", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Try the demo" }).click();
-  await expect(page.getByText("You're looking at a demo")).toBeVisible();
+  // The first visit on a fresh database simulates two months of workouts,
+  // and the other browser waits its turn, so this can take a while on CI
+  await expect(page.getByText("You're looking at a demo")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Reps per day" })).toBeVisible();
   await expect(page.getByRole("list", { name: "Reps by exercise" })).toContainText("Lateral raise");
 
