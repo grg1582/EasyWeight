@@ -62,7 +62,7 @@ def draw_texts(canvas, texts):
         # unchanged puts each value in the right channel, so no conversion is needed
         img = Image.fromarray(canvas)
         draw = ImageDraw.Draw(img)
-        for (text, x, y, _, color, align), font in zip(texts, fonts):
+        for (text, x, y, _, color, align), font in zip(texts, fonts, strict=True):
             draw.text((x, y), text, font=font, fill=color,
                       anchor={"center": "mm", "left": "lm", "right": "rm"}[align])
         canvas[:] = np.asarray(img)

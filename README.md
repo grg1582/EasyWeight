@@ -62,7 +62,7 @@ right away.
 
 ## Setup
 
-Requires Python 3.9+ (tested on 3.13) and a webcam
+Requires Python 3.10+ (tested on 3.13) and a webcam
 
 ```
 cd device

@@ -7,7 +7,7 @@ name = "easyweight"
 version = "0.2.0"
 description = "Rep counter for a smart mirror: recognizes the exercise and counts reps from a webcam"
 license = { text = "MIT" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "mediapipe",
     "numpy",
@@ -35,7 +35,7 @@ pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]

@@ -63,7 +63,7 @@ def move(*poses, frames_each=8):
     """Smoothly pass through poses (each a (shoulder, elbow) pair, or a full
     pose() list to hold). Returns a list of landmark lists"""
     out = []
-    for a, b in zip(poses, poses[1:]):
+    for a, b in zip(poses, poses[1:], strict=False):
         if isinstance(a, list) or isinstance(b, list):
             out += [a if isinstance(a, list) else pose(a)] * frames_each
             continue
