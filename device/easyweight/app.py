@@ -5,6 +5,10 @@
     python -m easyweight --model lite       # faster on slower computers
     python -m easyweight --fullscreen       # start fullscreen (for the mirror)
     python -m easyweight --record set.jsonl.gz   # also save the pose to a file
+    python -m easyweight --offline          # don't send workouts to the backend
+
+Workouts are sent to the backend once the mirror is registered
+(python -m easyweight.register). Without a network they wait on disk.
 
 Keys (also work on a Hebrew keyboard layout):
     F       fullscreen on/off
@@ -25,6 +29,8 @@ from .engine import Engine
 from .hud import render
 from .pose import MODELS_DIR, create_landmarker, load_model
 from .recording import Recorder
+from .reporter import Reporter, wall_clock
+from .sync import DEVICE_CONFIG, Outbox, Sender, load_device_config
 
 WINDOW = "EasyWeight"
 DEFAULT_SIZE = (1280, 720)
@@ -94,10 +100,29 @@ def parse_args(argv=None):
     p.add_argument("--models-dir", default=MODELS_DIR,
                    help="folder the pose models are kept in (default: %(default)s)")
     p.add_argument("--fullscreen", action="store_true", help="start in fullscreen")
+    p.add_argument("--offline", action="store_true",
+                   help="don't send workouts to the backend, even if registered")
+    p.add_argument("--device-config", default=DEVICE_CONFIG,
+                   help="this mirror's registration (default: %(default)s)")
     p.add_argument("--record", metavar="FILE",
                    help="also save the pose of every frame to FILE (.jsonl or .jsonl.gz), "
                         "to replay later with python -m easyweight.replay")
     return p.parse_args(argv)
+
+
+def start_sync(args):
+    """The reporter, outbox and sender, or Nones when the workouts stay local"""
+    config = None if args.offline else load_device_config(args.device_config)
+    if config is None:
+        if not args.offline:
+            print("Not registered with a backend, so workouts aren't saved. "
+                  "To save them: python -m easyweight.register --name \"My mirror\"")
+        return None, None, None
+    outbox = Outbox()
+    sender = Sender(outbox, config["api_url"], config["token"]).start()
+    print(f'Sending workouts to {config["api_url"]} as "{config.get("name", "this mirror")}"'
+          + (f" ({len(outbox)} waiting from before)" if len(outbox) else ""))
+    return Reporter(wall_clock()), outbox, sender
 
 
 def main(argv=None):
@@ -109,6 +134,7 @@ def main(argv=None):
                  "Is another app using it? You can also try --camera 1")
 
     engine = Engine()
+    reporter, outbox, sender = start_sync(args)
     fullscreen, show_camera = args.fullscreen, True
     flash_until, failed_reads = 0.0, 0
 
@@ -120,6 +146,9 @@ def main(argv=None):
     last_ts = -1
     recorder = None
     with contextlib.ExitStack() as stack:
+        if sender:
+            stack.callback(sender.stop)  # runs last: sends what's left
+            stack.callback(lambda: finish_workout(engine, reporter, outbox))
         stack.callback(cv2.destroyAllWindows)
         stack.callback(cap.release)
         landmarker = stack.enter_context(create_landmarker(model))
@@ -151,6 +180,8 @@ def main(argv=None):
 
             if engine.step(landmarks, w, h, now):
                 flash_until = now + 0.35
+            if reporter:
+                outbox.add(reporter.observe(engine.workout, now))
 
             canvas = render(window_size(), engine.workout, now, flash=now < flash_until,
                             frame=frame if show_camera else None)
@@ -170,6 +201,12 @@ def main(argv=None):
                 break
     if recorder:
         print(f"Saved the recording to {args.record}")
+
+
+def finish_workout(engine, reporter, outbox):
+    """On quit, end the workout so the backend knows it's over"""
+    engine.reset()
+    outbox.add(reporter.observe(engine.workout, time.perf_counter()))
 
 
 def run():
