@@ -3,12 +3,16 @@ Only its SHA-256 hash is stored, so a leaked database doesn't leak tokens."""
 import hashlib
 import secrets
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .db import get_db
 from .models import Device
+
+# Reads "Authorization: Bearer <token>", and adds an Authorize button to /docs
+bearer = HTTPBearer(auto_error=False, description="The token the device got when it was registered")
 
 
 def new_token() -> str:
@@ -20,11 +24,12 @@ def hash_token(token: str) -> str:
 
 
 def current_device(
-    authorization: str | None = Header(default=None), db: Session = Depends(get_db)
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: Session = Depends(get_db),
 ) -> Device:
     """FastAPI dependency: the device whose token is in "Authorization: Bearer <token>" """
-    scheme, _, token = (authorization or "").partition(" ")
-    if scheme.lower() != "bearer" or not token:
+    token = credentials.credentials if credentials else None
+    if not token:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "Missing device token",
