@@ -1,0 +1,125 @@
+"""The database tables.
+
+A device (a mirror) sends events. Each event is stored as it arrived (events)
+and applied to the workout tables:
+
+    devices ─< workouts ─< sets ─< reps
+       └─< events
+"""
+import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from .db import Base
+
+
+class Exercise(enum.StrEnum):
+    curl = "curl"
+    raise_ = "raise"
+    press = "press"
+
+
+class Side(enum.StrEnum):
+    left = "left"
+    right = "right"
+
+
+def _enum(cls, name):
+    # Store the values ("raise"), not the Python names ("raise_")
+    return Enum(cls, name=name, values_callable=lambda e: [m.value for m in e])
+
+
+class Device(Base):
+    __tablename__ = "devices"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    workouts: Mapped[list["Workout"]] = relationship(back_populates="device")
+
+
+class Workout(Base):
+    """Everything one person did at the mirror, from the first rep until the
+    mirror reset (they walked away, or rested too long)"""
+
+    __tablename__ = "workouts"
+    __table_args__ = (Index("ix_workouts_device_started", "device_id", "started_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)  # chosen by the device
+    device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    device: Mapped[Device] = relationship(back_populates="workouts")
+    sets: Mapped[list["WorkoutSet"]] = relationship(
+        back_populates="workout", order_by="WorkoutSet.started_at", cascade="all, delete-orphan"
+    )
+
+
+class WorkoutSet(Base):
+    __tablename__ = "sets"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)  # chosen by the device
+    workout_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workouts.id", ondelete="CASCADE"), index=True
+    )
+    exercise: Mapped[Exercise] = mapped_column(_enum(Exercise, "exercise"))
+    set_number: Mapped[int] = mapped_column(Integer)
+    reps: Mapped[int] = mapped_column(Integer, default=0)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    workout: Mapped[Workout] = relationship(back_populates="sets")
+    rep_list: Mapped[list["Rep"]] = relationship(
+        back_populates="set", order_by="Rep.at", cascade="all, delete-orphan"
+    )
+
+
+class Rep(Base):
+    """One rep of one arm, kept for tempo and form analysis later"""
+
+    __tablename__ = "reps"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    set_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sets.id", ondelete="CASCADE"), index=True)
+    side: Mapped[Side] = mapped_column(_enum(Side, "arm_side"))
+    count: Mapped[int] = mapped_column(Integer)  # this arm's rep count in the set
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    top: Mapped[float | None] = mapped_column(Float)  # top angle or height of the rep
+
+    set: Mapped[WorkoutSet] = relationship(back_populates="rep_list")
+
+
+class Event(Base):
+    """Every event exactly as a device sent it. Its id is chosen by the device,
+    so an event sent twice (after a lost connection) is only applied once"""
+
+    __tablename__ = "events"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("devices.id", ondelete="CASCADE"), index=True
+    )
+    type: Mapped[str] = mapped_column(String(32))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    data: Mapped[dict] = mapped_column(JSONB)

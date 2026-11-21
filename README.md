@@ -143,12 +143,69 @@ device/                 the mirror app (Python)
     app.py              camera, window, keys and the main loop
   tests/                pytest tests
   models/               pose models (downloaded, not in git)
+backend/                the API (FastAPI + PostgreSQL)
+  easyweight_api/
+    models.py           database tables (SQLAlchemy)
+    schemas.py          request and response shapes (Pydantic)
+    ingest.py           applies the events a mirror sends
+    security.py         device tokens
+    routers/            the HTTP endpoints
+  migrations/           database migrations (Alembic)
+  tests/                pytest tests against a real PostgreSQL
+docker-compose.yml      runs the API and the database
 ```
 
 Everything from `config.py` to `replay.py` is plain Python with no camera, OpenCV
 or MediaPipe, so it runs anywhere and is fully tested.
 
+## Backend
+
+The mirror sends what happens (a set started, a rep, a set ended) to the API,
+which stores it in PostgreSQL and serves workout history and stats.
+
+```
+mirror ──events──▶ FastAPI ──▶ PostgreSQL
+                      ▲
+          history and stats (web app, coming next)
+```
+
+Run it with Docker:
+
+```
+docker compose up --build
+```
+
+Then open http://localhost:8000/docs for interactive docs where you can try
+every endpoint.
+
+| Endpoint | What it does |
+|----------|--------------|
+| `POST /api/v1/devices` | Register a mirror. Returns its token, once |
+| `GET /api/v1/devices/me` | The mirror a token belongs to |
+| `POST /api/v1/events` | A mirror sends events (needs its token) |
+| `GET /api/v1/workouts` | Workouts, newest first, with paging |
+| `GET /api/v1/workouts/{id}` | One workout and its sets |
+| `GET /api/v1/stats` | Sets and reps per exercise, and reps per day |
+| `GET /health` | Is the API up and can it reach the database |
+
+How events work:
+
+- **Every event has an id chosen by the mirror**, so sending it twice (say, the
+  answer was lost and the mirror retried) is harmless: it comes back as
+  `duplicate` and isn't counted again.
+- **Each event gets its own result** (`applied`, `duplicate` or `rejected` with a
+  reason). One bad event doesn't block the rest of the batch, so a mirror
+  sending a backlog after being offline never gets stuck.
+- **Events are stored as they arrived** (`events` table) as well as applied to
+  `workouts`, `sets` and `reps`, so nothing a mirror sent is ever lost.
+- A mirror sends a token, and only its SHA-256 hash is stored. A mirror can
+  only change its own workouts.
+
+Reading workouts and stats doesn't need a login yet. User accounts come next.
+
 ## Development
+
+The mirror app:
 
 ```
 cd device
@@ -157,11 +214,27 @@ pytest                  # run the tests
 ruff check .            # lint
 ```
 
+The backend (Python 3.11+). Its tests need a PostgreSQL database, which Docker
+provides:
+
+```
+docker compose up -d db
+cd backend
+pip install -e ".[dev]"
+set TEST_DATABASE_URL=postgresql+psycopg://easyweight:easyweight@localhost:5432/easyweight_test
+pytest
+ruff check .
+```
+
+(`export` instead of `set` on macOS and Linux. In PowerShell:
+`$env:TEST_DATABASE_URL="..."`.)
+
 The tests build synthetic poses (`tests/poses.py`) and play whole sessions
 through the counter: sets, rests, drinking during a rest, switching exercise,
 walking away. Real recordings in `tests/recordings/` are replayed too, see
 [its README](device/tests/recordings/README.md). GitHub Actions runs the lint
-and the tests on every push.
+and the tests of both parts on every push, and checks that `docker compose`
+brings up a working API.
 
 ## License
 

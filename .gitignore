@@ -12,3 +12,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
+
+# Local settings (may hold passwords)
+.env

@@ -1,0 +1,46 @@
+name: Backend
+
+on:
+  push:
+    paths: ["backend/**", "docker-compose.yml", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["backend/**", "docker-compose.yml", ".github/workflows/backend.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: easyweight
+          POSTGRES_PASSWORD: easyweight
+          POSTGRES_DB: easyweight_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U easyweight"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://easyweight:easyweight@localhost:5432/easyweight_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: pytest -v
+
+  docker:
+    # The image must build and the API must answer /health against a real database
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up --build --detach --wait
+      - run: curl --fail http://localhost:8000/health
+      - if: failure()
+        run: docker compose logs
+      - run: docker compose down
