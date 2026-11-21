@@ -15,3 +15,6 @@ __pycache__/
 
 # Local settings (may hold passwords)
 .env
+
+# The mirror's registration (holds its token) and its outbox
+device/data/

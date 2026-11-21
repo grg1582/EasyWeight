@@ -89,6 +89,26 @@ the rep counter without a camera:
 python -m easyweight.replay set.jsonl.gz
 ```
 
+### Saving workouts to the backend
+
+Register the mirror once with the [backend](#backend) (it must be running):
+
+```
+python -m easyweight.register --name "Home mirror"
+```
+
+This saves the mirror's token to `device/data/device.json`. From then on the
+app sends every set and rep to the backend as it happens. Without a network
+nothing is lost: events wait in `device/data/outbox.db` and go out when the
+server is reachable again, even after a restart. `--offline` turns this off.
+
+A recording can be sent too, as if it happened just now, which is handy for
+trying the backend without a camera:
+
+```
+python -m easyweight.replay set.jsonl.gz --send
+```
+
 ### Keys
 
 These also work on a Hebrew keyboard layout.
@@ -134,11 +154,15 @@ device/                 the mirror app (Python)
     engine.py           feeds one frame into the workout
     recording.py        saving and loading pose recordings
     replay.py           counts the reps in a recording
+    reporter.py         turns the workout into events for the backend
+    sync.py             outbox on disk, and sending it in the background
+    register.py         registers the mirror with the backend
     pose.py             the MediaPipe pose model
     hud.py              drawing the mirror display
     app.py              camera, window, keys and the main loop
   tests/                pytest tests
   models/               pose models (downloaded, not in git)
+  data/                 the mirror's token and outbox (not in git)
 backend/                the API (FastAPI + PostgreSQL)
   easyweight_api/
     models.py           database tables (SQLAlchemy)
@@ -151,8 +175,8 @@ backend/                the API (FastAPI + PostgreSQL)
 docker-compose.yml      runs the API and the database
 ```
 
-Everything from `config.py` to `replay.py` is plain Python with no camera, OpenCV
-or MediaPipe, so it runs anywhere and is fully tested.
+Everything except `pose.py`, `hud.py` and `app.py` is plain Python with no
+camera, OpenCV or MediaPipe, so it runs anywhere and is fully tested.
 
 ## Backend
 
@@ -160,9 +184,9 @@ The mirror sends what happens (a set started, a rep, a set ended) to the API,
 which stores it in PostgreSQL and serves workout history and stats.
 
 ```
-mirror ──events──▶ FastAPI ──▶ PostgreSQL
-                      ▲
-          history and stats (web app, coming next)
+mirror ──▶ outbox ──events──▶ FastAPI ──▶ PostgreSQL
+ (Python)  (SQLite)              ▲
+                     history and stats (web app, coming next)
 ```
 
 Run it with Docker:
