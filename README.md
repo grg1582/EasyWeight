@@ -13,6 +13,40 @@ https://github.com/user-attachments/assets/cbb6c348-219c-41a6-bf49-df96ef5d7411
 
 ![EasyWeight smart mirror concept](Images/easyweight_mirror_concept.png)
 
+Every set and rep is also saved to your account, and a web dashboard shows
+your training over time.
+
+**Live demo: [easyweight.onrender.com](https://easyweight.onrender.com)**.
+Press *Try the demo* to look around an account with two months of simulated
+workouts, no sign-up needed. (It runs on a free plan that sleeps when nobody
+uses it, so the first visit can take a minute to wake up.)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Images/dashboard-dark.png">
+  <img alt="The EasyWeight dashboard: reps per day, reps by exercise and recent workouts" src="Images/dashboard.png">
+</picture>
+
+### The whole system
+
+```
+mirror (Python)                                      cloud
+webcam ─▶ MediaPipe Pose ─▶ rep counter
+                               │
+                               ▼            HTTPS
+                  outbox (SQLite: works ──────────▶ FastAPI ─▶ PostgreSQL
+                  offline, sends later)                ▲
+                                                       │ /api
+                                      browser ─▶ React dashboard
+```
+
+| Part | Built with |
+|------|------------|
+| Mirror app | Python, MediaPipe, OpenCV, SQLite outbox with retries |
+| API | FastAPI, SQLAlchemy, Alembic, PostgreSQL, JWT sign-in with refresh tokens, Argon2 |
+| Dashboard | React, TypeScript, Tailwind, TanStack Query, Recharts |
+| Tests | pytest (against a real PostgreSQL), Vitest, Playwright in a real browser |
+| Delivery | Docker, Docker Compose, GitHub Actions, Render, Neon, Sentry |
+
 
 ## How it works
 
@@ -91,13 +125,16 @@ python -m easyweight.replay set.jsonl.gz
 
 ### Saving workouts to the backend
 
-Register the mirror once with the [backend](#backend) (it must be running):
+Create an account in the [dashboard](#web-dashboard), then register the
+mirror to it once (the backend must be running). It asks for your password:
 
 ```
-python -m easyweight.register --name "Home mirror"
+python -m easyweight.register --name "Home mirror" --email you@example.com
 ```
 
-This saves the mirror's token to `device/data/device.json`. From then on the
+This saves the mirror's own token to `device/data/device.json` (your password
+isn't saved). You can also add a mirror on the dashboard's Mirrors page and
+save the settings it shows into that file. From then on the
 app sends every set and rep to the backend as it happens. Without a network
 nothing is lost: events wait in `device/data/outbox.db` and go out when the
 server is reachable again, even after a restart. `--offline` turns this off.
@@ -156,7 +193,7 @@ device/                 the mirror app (Python)
     replay.py           counts the reps in a recording
     reporter.py         turns the workout into events for the backend
     sync.py             outbox on disk, and sending it in the background
-    register.py         registers the mirror with the backend
+    register.py         registers the mirror to your account
     pose.py             the MediaPipe pose model
     hud.py              drawing the mirror display
     app.py              camera, window, keys and the main loop
@@ -168,11 +205,23 @@ backend/                the API (FastAPI + PostgreSQL)
     models.py           database tables (SQLAlchemy)
     schemas.py          request and response shapes (Pydantic)
     ingest.py           applies the events a mirror sends
+    auth.py             user accounts: passwords and login tokens
+    demo.py             the read-only demo account
+    simulator.py        makes up realistic workouts, as a mirror would send them
+    ratelimit.py        limits sign-in attempts
     security.py         device tokens
     routers/            the HTTP endpoints
   migrations/           database migrations (Alembic)
   tests/                pytest tests against a real PostgreSQL
-docker-compose.yml      runs the API and the database
+web/                    the dashboard (React + TypeScript)
+  src/
+    api/                talking to the backend, staying signed in
+    auth/               who is signed in
+    pages/              dashboard, workouts, one workout, mirrors, sign-in
+    components/         charts, tables and small pieces
+  e2e/                  Playwright tests in a real browser
+docker-compose.yml      runs the dashboard, the API and the database
+render.yaml             deploys the API and the dashboard on Render
 ```
 
 Everything except `pose.py`, `hud.py` and `app.py` is plain Python with no
@@ -181,32 +230,44 @@ camera, OpenCV or MediaPipe, so it runs anywhere and is fully tested.
 ## Backend
 
 The mirror sends what happens (a set started, a rep, a set ended) to the API,
-which stores it in PostgreSQL and serves workout history and stats.
+which stores it in PostgreSQL. Each user sees their own mirrors' workouts in
+the web dashboard.
 
 ```
 mirror ──▶ outbox ──events──▶ FastAPI ──▶ PostgreSQL
- (Python)  (SQLite)              ▲
-                     history and stats (web app, coming next)
+ (Python)  (SQLite)   (device     ▲
+                       token)     │ history and stats (user login)
+                                  │
+                         dashboard (React)
 ```
 
-Run it with Docker:
+Run everything with Docker:
 
 ```
 docker compose up --build
 ```
 
-Then open http://localhost:8000/docs for interactive docs where you can try
-every endpoint.
+Then open http://localhost:8080 for the dashboard, or
+http://localhost:8000/docs for interactive API docs where you can try every
+endpoint (the Authorize button signs in).
 
-| Endpoint | What it does |
-|----------|--------------|
-| `POST /api/v1/devices` | Register a mirror. Returns its token, once |
-| `GET /api/v1/devices/me` | The mirror a token belongs to |
-| `POST /api/v1/events` | A mirror sends events (needs its token) |
-| `GET /api/v1/workouts` | Workouts, newest first, with paging |
-| `GET /api/v1/workouts/{id}` | One workout and its sets |
-| `GET /api/v1/stats` | Sets and reps per exercise, and reps per day |
-| `GET /health` | Is the API up and can it reach the database |
+| Endpoint | Who | What it does |
+|----------|-----|--------------|
+| `POST /api/v1/auth/register` | anyone | Create an account. Signs in right away |
+| `POST /api/v1/auth/login` | anyone | Sign in with email and password |
+| `POST /api/v1/auth/refresh` | anyone | Swap a refresh token for a new pair |
+| `POST /api/v1/auth/logout` | anyone | Sign out: the refresh token stops working |
+| `POST /api/v1/auth/demo` | anyone | Sign in to the read-only demo account |
+| `GET /api/v1/users/me` | user | The signed-in user |
+| `GET /api/v1/devices` | user | Your mirrors |
+| `POST /api/v1/devices` | user | Add a mirror. Returns its token, once |
+| `DELETE /api/v1/devices/{id}` | user | Remove a mirror and its workouts |
+| `GET /api/v1/devices/me` | mirror | The mirror a token belongs to |
+| `POST /api/v1/events` | mirror | A mirror sends events |
+| `GET /api/v1/workouts` | user | Your workouts, newest first, with paging |
+| `GET /api/v1/workouts/{id}` | user | One workout and its sets |
+| `GET /api/v1/stats` | user | Sets and reps per exercise, and reps per day |
+| `GET /health` | anyone | Is the API up and can it reach the database |
 
 How events work:
 
@@ -221,7 +282,51 @@ How events work:
 - A mirror sends a token, and only its SHA-256 hash is stored. A mirror can
   only change its own workouts.
 
-Reading workouts and stats doesn't need a login yet. User accounts come next.
+How signing in works:
+
+- **Passwords** are stored as Argon2 hashes. A wrong email and a wrong
+  password get the same answer, in the same time, so the API doesn't reveal
+  who has an account.
+- **Two tokens.** Signing in gives a short-lived access token (a JWT, 15
+  minutes) sent with every request, and a refresh token (30 days) used only to
+  get a new pair.
+- **Refresh tokens work once.** Each use replaces it. If an already-used one
+  shows up again, someone copied it, so every sign-in of that user is
+  cancelled.
+- **Users only see their own data.** Someone else's workout is "not found",
+  not "forbidden", so ids can't be probed.
+
+## Web dashboard
+
+React, TypeScript and Tailwind, with TanStack Query for loading data and
+Recharts for the charts. Sign up, add a mirror, and see your training: reps
+per day, reps and sets per exercise, every workout and its sets. It follows
+the system's dark mode and works on a phone.
+
+The access token is kept only in memory. When it expires, the app swaps the
+refresh token for a new pair once and repeats the request, so you stay signed
+in, also after a reload.
+
+## Deploying
+
+The live demo runs on free plans: the API and the dashboard on
+[Render](https://render.com), the database on [Neon](https://neon.tech).
+`render.yaml` describes both Render services, so setting it up is:
+
+1. Create a free PostgreSQL database on Neon and copy its connection string.
+2. On Render: New > Blueprint, pick this repository, and paste the connection
+   string as `DATABASE_URL` when asked. Render makes a random `JWT_SECRET`.
+3. Render builds both services and redeploys on every push to `main`.
+
+The API brings the database up to date on start (`alembic upgrade head`) and
+refuses to start in production without a proper `JWT_SECRET`. Sign-in attempts
+and new accounts are rate limited. Set `SENTRY_DSN` to get error reports.
+
+To fill the demo account by hand, or after turning it off and on:
+
+```
+python -m easyweight_api.demo
+```
 
 ## Development
 
@@ -249,12 +354,25 @@ ruff check .
 (`export` instead of `set` on macOS and Linux. In PowerShell:
 `$env:TEST_DATABASE_URL="..."`.)
 
+The dashboard needs [Node.js](https://nodejs.org) 24. With the backend
+running (`docker compose up -d db api`):
+
+```
+cd web
+npm install
+npm run dev             # http://localhost:5173, reloads as you edit
+npm test                # component tests (Vitest)
+npm run typecheck
+npx playwright install chromium   # once
+npm run e2e             # end-to-end tests in a real browser
+```
+
 The tests build synthetic poses (`tests/poses.py`) and play whole sessions
 through the counter: sets, rests, drinking during a rest, switching exercise,
 walking away. Real recordings in `tests/recordings/` are replayed too, see
 [its README](device/tests/recordings/README.md). GitHub Actions runs the lint
-and the tests of both parts on every push, and checks that `docker compose`
-brings up a working API.
+and the tests of all three parts on every push, the end-to-end tests against
+a real backend, and checks that `docker compose` brings up a working system.
 
 ## License
 

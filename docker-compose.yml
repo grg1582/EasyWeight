@@ -1,8 +1,9 @@
-# The backend and its database, with one command:
+# The whole system, with one command:
 #
 #   docker compose up --build
 #
-# API:  http://localhost:8000      interactive docs: http://localhost:8000/docs
+# Dashboard:  http://localhost:8080
+# API:        http://localhost:8000      interactive docs: http://localhost:8000/docs
 
 services:
   db:
@@ -26,11 +27,23 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+psycopg://easyweight:easyweight@db:5432/easyweight
+      # Signs login tokens. Fine for your own computer; set a long random one
+      # anywhere else (for example in a .env file next to this one)
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-in-production}
+      # Each end-to-end test run signs up new users; allow many on your computer
+      SIGNUPS_PER_HOUR: 1000
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+
+  web:
+    build: ./web
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
 
 volumes:
   pgdata:

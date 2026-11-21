@@ -18,3 +18,10 @@ __pycache__/
 
 # The mirror's registration (holds its token) and its outbox
 device/data/
+
+# Web dashboard: installed packages, builds and test reports
+node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+*.tsbuildinfo

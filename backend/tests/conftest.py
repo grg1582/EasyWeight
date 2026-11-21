@@ -61,6 +61,15 @@ def db(engine):
         outer.rollback()
 
 
+@pytest.fixture(autouse=True)
+def fresh_rate_limits():
+    """Each test starts with no sign-in attempts counted"""
+    from easyweight_api.routers import auth
+
+    auth.login_limit.clear()
+    auth.signup_limit.clear()
+
+
 @pytest.fixture
 def client(db):
     app = create_app()
@@ -69,10 +78,32 @@ def client(db):
         yield client
 
 
+PASSWORD = "correct horse battery"
+
+
+def sign_up(client, email="roy@example.com", password=PASSWORD):
+    """Create an account: {"email", "password", "access_token", "refresh_token", "headers"}"""
+    r = client.post("/api/v1/auth/register", json={"email": email, "password": password})
+    assert r.status_code == 201, r.text
+    tokens = r.json()
+    return {"email": email, "password": password, **tokens,
+            "headers": {"Authorization": f"Bearer {tokens['access_token']}"}}
+
+
 @pytest.fixture
-def device(client):
-    """A registered device: {"id", "token", "headers"}"""
+def user(client):
+    """A signed-up user. From here on the client sends their access token,
+    unless a request gives other headers (like a device's token)"""
+    user = sign_up(client)
+    client.headers.update(user["headers"])
+    return user
+
+
+@pytest.fixture
+def device(client, user):
+    """A device registered by `user`: {"id", "token", "headers"}"""
     r = client.post("/api/v1/devices", json={"name": "Test mirror"})
+    assert r.status_code == 201, r.text
     body = r.json()
     return {"id": body["id"], "token": body["token"],
             "headers": {"Authorization": f"Bearer {body['token']}"}}

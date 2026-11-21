@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from easyweight_api.models import Event, Rep, WorkoutSet
 
 
@@ -79,7 +81,25 @@ def test_invalid_events_are_refused(client, device, mirror):
     assert r.status_code == 422
 
 
-def test_device_last_seen_is_updated(client, send, mirror, device):
-    send([mirror.start_workout()])
+def test_device_last_seen_is_when_it_sent(client, send, mirror, device):
+    before = datetime.now(UTC)
+    send([mirror.start_workout()])  # an event from weeks ago, sent now
     me = client.get("/api/v1/devices/me", headers=device["headers"]).json()
-    assert me["last_seen_at"] is not None
+    assert datetime.fromisoformat(me["last_seen_at"]) >= before - timedelta(seconds=1)
+
+
+def test_the_same_event_twice_in_one_batch(send, mirror, db):
+    start = mirror.start_workout()
+    result = send([start, start])
+    assert [r["status"] for r in result["results"]] == ["applied", "duplicate"]
+    assert db.query(Event).count() == 1
+
+
+def test_a_long_backlog_in_one_batch(client, send, mirror):
+    events = [mirror.start_workout()]
+    for number in range(1, 6):
+        events += mirror.full_set("curl", 12, number)
+    events.append(mirror.end_workout())
+    assert send(events)["applied"] == len(events)
+    workout = client.get(f"/api/v1/workouts/{mirror.workout_id}").json()
+    assert [s["reps"] for s in workout["sets"]] == [12] * 5

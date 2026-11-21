@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from .models import Device
 
-# Reads "Authorization: Bearer <token>", and adds an Authorize button to /docs
-bearer = HTTPBearer(auto_error=False, description="The token the device got when it was registered")
+# Reads "Authorization: Bearer <token>", and adds it to the Authorize button in /docs
+bearer = HTTPBearer(auto_error=False, scheme_name="Device",
+                    description="A mirror's token, from registering it")
 
 
 def new_token() -> str:

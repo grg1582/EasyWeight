@@ -1,10 +1,11 @@
 """The database tables.
 
-A device (a mirror) sends events. Each event is stored as it arrived (events)
-and applied to the workout tables:
+A user owns devices (mirrors). A device sends events. Each event is stored as
+it arrived (events) and applied to the workout tables:
 
-    devices ─< workouts ─< sets ─< reps
-       └─< events
+    users ─< devices ─< workouts ─< sets ─< reps
+      │         └─< events
+      └─< refresh_tokens
 """
 import enum
 import uuid
@@ -43,15 +44,46 @@ def _enum(cls, name):
     return Enum(cls, name=name, values_callable=lambda e: [m.value for m in e])
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(254), unique=True)  # stored lowercase
+    password_hash: Mapped[str] = mapped_column(String(200))  # Argon2, never the password
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    devices: Mapped[list["Device"]] = relationship(back_populates="owner")
+
+
+class RefreshToken(Base):
+    """One per sign-in. Each use replaces it with a new one, so a stolen token
+    that is used after its owner already used it gives itself away"""
+
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Device(Base):
     __tablename__ = "devices"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    # Empty for mirrors registered before user accounts existed
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     name: Mapped[str] = mapped_column(String(100))
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    owner: Mapped[User | None] = relationship(back_populates="devices")
     workouts: Mapped[list["Workout"]] = relationship(back_populates="device")
 
 
