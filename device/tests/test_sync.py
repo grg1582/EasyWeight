@@ -1,6 +1,7 @@
 """The outbox and the sender, against a small fake server"""
 import json
 import threading
+import urllib.parse
 import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -28,9 +29,18 @@ class FakeServer:
                 pass
 
             def do_POST(self):
-                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                raw = self.rfile.read(int(self.headers["Content-Length"]))
                 token = self.headers.get("Authorization")
+                if self.path == "/api/v1/auth/login":
+                    form = dict(urllib.parse.parse_qsl(raw.decode()))
+                    if form != {"username": "roy@example.com", "password": "hunter22"}:
+                        return self.answer(401, {"detail": "Wrong email or password"})
+                    return self.answer(200, {"access_token": "user-token",
+                                             "refresh_token": "r", "token_type": "bearer"})
+                body = json.loads(raw)
                 if self.path == "/api/v1/devices":
+                    if token != "Bearer user-token":
+                        return self.answer(401, {"detail": "Not signed in"})
                     return self.answer(201, {"id": "dev-1", "name": body["name"],
                                              "token": "secret"})
                 if token != "Bearer secret":
@@ -156,8 +166,26 @@ def test_background_thread_sends(server, outbox):
 
 def test_register_saves_the_token(server, tmp_path, capsys):
     path = tmp_path / "device.json"
-    register(["--api-url", server.url, "--name", "Home mirror", "--config", str(path)])
+    register(["--api-url", server.url, "--name", "Home mirror", "--config", str(path),
+              "--email", "roy@example.com", "--password", "hunter22"])
     config = load_device_config(path)
     assert config == {"api_url": server.url, "device_id": "dev-1", "name": "Home mirror",
                       "token": "secret"}
     assert "Registered" in capsys.readouterr().out
+    assert "hunter22" not in path.read_text()  # the password isn't saved
+
+
+def test_register_asks_for_the_password(server, tmp_path, monkeypatch):
+    monkeypatch.setattr("getpass.getpass", lambda prompt: "hunter22")
+    path = tmp_path / "device.json"
+    register(["--api-url", server.url, "--name", "Home mirror", "--config", str(path),
+              "--email", "roy@example.com"])
+    assert load_device_config(path)["token"] == "secret"
+
+
+def test_register_with_a_wrong_password(server, tmp_path):
+    path = tmp_path / "device.json"
+    with pytest.raises(SystemExit, match="Wrong email or password"):
+        register(["--api-url", server.url, "--name", "Home mirror", "--config", str(path),
+                  "--email", "roy@example.com", "--password", "nope"])
+    assert not path.exists()

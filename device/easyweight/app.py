@@ -116,7 +116,8 @@ def start_sync(args):
     if config is None:
         if not args.offline:
             print("Not registered with a backend, so workouts aren't saved. "
-                  "To save them: python -m easyweight.register --name \"My mirror\"")
+                  "To save them: python -m easyweight.register "
+                  "--name \"My mirror\" --email you@example.com")
         return None, None, None
     outbox = Outbox()
     sender = Sender(outbox, config["api_url"], config["token"]).start()

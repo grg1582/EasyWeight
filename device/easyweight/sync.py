@@ -11,6 +11,7 @@ import logging
 import sqlite3
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -36,13 +37,17 @@ def save_device_config(config, path=DEVICE_CONFIG):
     path.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
 
-def api_request(method, url, body=None, token=None, timeout=10):
-    """A JSON request. Returns (status, parsed body). Raises urllib.error.URLError
+def api_request(method, url, body=None, token=None, timeout=10, form=None):
+    """A JSON request, or a form post when `form` is given (only signing in
+    uses one). Returns (status, parsed body). Raises urllib.error.URLError
     (or OSError) when the server can't be reached"""
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     data = None if body is None else json.dumps(body).encode()
+    if form is not None:
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+        data = urllib.parse.urlencode(form).encode()
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
