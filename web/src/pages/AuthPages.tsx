@@ -6,23 +6,27 @@ import { useAuth } from "../auth/AuthContext";
 import { Logo } from "../components/Layout";
 
 function AuthForm({ mode }: { mode: "login" | "register" }) {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, tryDemo } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const isLogin = mode === "login";
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function run(action: () => Promise<void>) {
     setError(null);
     setBusy(true);
     try {
-      await (isLogin ? signIn : signUp)(email, password);
+      await action();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
       setBusy(false);
     }
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    void run(() => (isLogin ? signIn : signUp)(email, password));
   }
 
   return (
@@ -79,7 +83,23 @@ function AuthForm({ mode }: { mode: "login" | "register" }) {
             {busy ? "One moment…" : isLogin ? "Sign in" : "Create account"}
           </button>
         </form>
-        <p className="mt-4 text-center text-sm text-muted">
+        <div className="my-5 flex items-center gap-3 text-xs text-faint">
+          <span className="h-px flex-1 bg-line" />
+          or
+          <span className="h-px flex-1 bg-line" />
+        </div>
+        <button
+          type="button"
+          className="btn-ghost w-full"
+          disabled={busy}
+          onClick={() => void run(tryDemo)}
+        >
+          Try the demo
+        </button>
+        <p className="mt-2 text-center text-xs text-faint">
+          Two months of made-up workouts, no account needed
+        </p>
+        <p className="mt-6 text-center text-sm text-muted">
           {isLogin ? "No account yet? " : "Already have an account? "}
           <Link to={isLogin ? "/register" : "/login"} className="font-medium text-accent">
             {isLogin ? "Create one" : "Sign in"}

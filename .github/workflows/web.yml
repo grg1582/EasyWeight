@@ -41,6 +41,7 @@ jobs:
           --health-interval 5s --health-timeout 3s --health-retries 10
     env:
       DATABASE_URL: postgresql+psycopg://easyweight:easyweight@localhost:5432/easyweight
+      SIGNUPS_PER_HOUR: 1000 # every test signs up new users
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

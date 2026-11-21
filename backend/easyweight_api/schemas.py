@@ -22,6 +22,7 @@ class UserOut(BaseModel):
     id: uuid.UUID
     email: str
     created_at: datetime
+    is_demo: bool = Field(False, description="The read-only demo account")
 
 
 class TokenPair(BaseModel):

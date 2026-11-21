@@ -61,6 +61,15 @@ def db(engine):
         outer.rollback()
 
 
+@pytest.fixture(autouse=True)
+def fresh_rate_limits():
+    """Each test starts with no sign-in attempts counted"""
+    from easyweight_api.routers import auth
+
+    auth.login_limit.clear()
+    auth.signup_limit.clear()
+
+
 @pytest.fixture
 def client(db):
     app = create_app()

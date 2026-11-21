@@ -13,6 +13,7 @@ interface Auth {
   user: User | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
+  tryDemo: () => Promise<void>;
   signOut: () => Promise<void>;
   retry: () => void;
 }
@@ -55,6 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [start],
   );
 
+  const tryDemo = useCallback(async () => {
+    await client.demo();
+    start();
+  }, [start]);
+
   const signOut = useCallback(async () => {
     await client.logout();
     setSession(false);
@@ -73,10 +79,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: me.data ?? null,
       signIn,
       signUp,
+      tryDemo,
       signOut,
       retry: () => void me.refetch(),
     }),
-    [status, me, signIn, signUp, signOut],
+    [status, me, signIn, signUp, tryDemo, signOut],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

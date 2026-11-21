@@ -2,6 +2,7 @@ import logging
 
 from fastapi import FastAPI
 
+from .config import get_settings
 from .routers import auth, devices, events, health, stats, users, workouts
 
 
@@ -15,10 +16,20 @@ class _SkipHealthChecks(logging.Filter):
 logging.getLogger("uvicorn.access").addFilter(_SkipHealthChecks())
 
 
+def _report_errors_to_sentry(dsn: str) -> None:
+    import sentry_sdk
+
+    sentry_sdk.init(dsn=dsn, environment=get_settings().environment,
+                    traces_sample_rate=0.1, send_default_pii=False)
+
+
 def create_app() -> FastAPI:
+    settings = get_settings()
+    if settings.sentry_dsn:
+        _report_errors_to_sentry(settings.sentry_dsn)
     app = FastAPI(
         title="EasyWeight API",
-        version="0.2.0",
+        version="0.3.0",
         description="Stores the workouts that EasyWeight mirrors send, and serves "
                     "each user their workout history and stats.\n\n"
                     "Two kinds of sign-in: **User** (email and password, for the "

@@ -156,6 +156,11 @@ export async function register(email: string, password: string): Promise<void> {
   );
 }
 
+/** The read-only demo account, with made-up workouts */
+export async function demo(): Promise<void> {
+  setTokens(await api<TokenPair>("/auth/demo", { method: "POST", auth: false }));
+}
+
 export async function logout(): Promise<void> {
   const token = storedRefreshToken();
   clearTokens();

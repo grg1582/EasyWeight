@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import current_user
 from ..db import get_db
+from ..demo import not_demo
 from ..models import Device, User
 from ..schemas import DeviceCreate, DeviceCreated, DeviceOut
 from ..security import current_device, hash_token, new_token
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/api/v1/devices", tags=["devices"])
 
 
 @router.post("", response_model=DeviceCreated, status_code=status.HTTP_201_CREATED)
-def register_device(body: DeviceCreate, user: User = Depends(current_user),
+def register_device(body: DeviceCreate, user: User = Depends(not_demo),
                     db: Session = Depends(get_db)):
     """Register a mirror to the signed-in user. The token in the answer is
     shown only this once: the mirror keeps it and sends it with its events"""
@@ -40,7 +41,7 @@ def this_device(device: Device = Depends(current_device)):
 
 
 @router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_device(device_id: uuid.UUID, user: User = Depends(current_user),
+def remove_device(device_id: uuid.UUID, user: User = Depends(not_demo),
                   db: Session = Depends(get_db)):
     """Remove a mirror and everything it recorded. Its token stops working"""
     device = db.get(Device, device_id)

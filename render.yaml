@@ -1,0 +1,55 @@
+# Deploys EasyWeight on Render (render.com) as a "Blueprint": in the Render
+# dashboard, New > Blueprint, pick this repository, and Render creates both
+# services below. The database is not here: it's on Neon (neon.tech), and its
+# address goes into DATABASE_URL when Render asks for it.
+#
+#   browser ──▶ easyweight (static site) ──/api/*──▶ easyweight-api ──▶ Neon PostgreSQL
+#
+# The site passes /api/* on to the API, so the browser only ever talks to one
+# address and the API needs no CORS. If Render gives the API another address
+# than https://easyweight-api.onrender.com (the name was taken), change the
+# rewrite below to match.
+
+services:
+  - type: web
+    name: easyweight-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    buildFilter:
+      paths: ["backend/**"]
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false # asked for when the Blueprint is created: Neon's connection string
+      - key: JWT_SECRET
+        generateValue: true # a random secret, made by Render
+      - key: SENTRY_DSN
+        sync: false # optional: leave empty to skip error reports
+
+  - type: web
+    name: easyweight
+    runtime: static
+    buildCommand: cd web && npm ci && npm run build
+    staticPublishPath: ./web/dist
+    buildFilter:
+      paths: ["web/**"]
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://easyweight-api.onrender.com/api/*
+      # Every other address is a page of the app: let React pick it
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable

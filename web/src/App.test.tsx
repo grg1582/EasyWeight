@@ -49,7 +49,8 @@ function backend(devices: unknown[] = [{ id: "d1", name: "Home mirror", created_
       String(init.body).includes("password=right+password")
         ? { body: tokens() }
         : { status: 401, body: { detail: "Wrong email or password" } },
-    "GET /users/me": authed({ id: "u1", email: "roy@example.com", created_at: today }),
+    "POST /auth/demo": () => ({ body: tokens() }),
+    "GET /users/me": authed({ id: "u1", email: "roy@example.com", created_at: today, is_demo: false }),
     "GET /devices": authed(devices),
     "GET /stats": authed({
       days: 30,
@@ -110,6 +111,20 @@ describe("the dashboard app", () => {
     await signIn();
     expect(await screen.findByText("Connect your first mirror")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Add a mirror" })).toHaveAttribute("href", "/mirrors");
+  });
+
+  it("opens the demo without an account, and says it's a demo", async () => {
+    const api = backend();
+    const routes = api.fetchMock.getMockImplementation()!;
+    api.fetchMock.mockImplementation(async (input, init) =>
+      String(input).endsWith("/users/me")
+        ? new Response(JSON.stringify({ id: "demo", email: "demo@easyweight.dev", is_demo: true }))
+        : routes(input, init),
+    );
+    renderApp();
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Try the demo" }));
+    expect(await screen.findByText(/looking at a demo/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
   });
 
   it("stays signed in after a reload, using the stored refresh token", async () => {

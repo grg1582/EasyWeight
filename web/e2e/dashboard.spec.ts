@@ -102,3 +102,16 @@ test("one user can't see another user's workouts", async ({ page, request }) => 
   await page.getByRole("link", { name: "Workouts" }).click();
   await expect(page.getByText("No workouts yet")).toBeVisible();
 });
+
+test("the demo shows a full dashboard and can't be changed", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Try the demo" }).click();
+  await expect(page.getByText("You're looking at a demo")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Reps per day" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Reps by exercise" })).toContainText("Lateral raise");
+
+  await page.getByRole("link", { name: "Mirrors" }).click();
+  await expect(page.getByText("Demo mirror")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "This is the demo" })).toBeVisible();
+});

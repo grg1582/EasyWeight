@@ -17,6 +17,40 @@ float on the glass.
 
 ![EasyWeight smart mirror concept](Images/easyweight_mirror_concept.png)
 
+Every set and rep is also saved to your account, and a web dashboard shows
+your training over time.
+
+**Live demo: [easyweight.onrender.com](https://easyweight.onrender.com)**.
+Press *Try the demo* to look around an account with two months of simulated
+workouts, no sign-up needed. (It runs on a free plan that sleeps when nobody
+uses it, so the first visit can take a minute to wake up.)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Images/dashboard-dark.png">
+  <img alt="The EasyWeight dashboard: reps per day, reps by exercise and recent workouts" src="Images/dashboard.png">
+</picture>
+
+### The whole system
+
+```
+mirror (Python)                                      cloud
+webcam ─▶ MediaPipe Pose ─▶ rep counter
+                               │
+                               ▼            HTTPS
+                  outbox (SQLite: works ──────────▶ FastAPI ─▶ PostgreSQL
+                  offline, sends later)                ▲
+                                                       │ /api
+                                      browser ─▶ React dashboard
+```
+
+| Part | Built with |
+|------|------------|
+| Mirror app | Python, MediaPipe, OpenCV, SQLite outbox with retries |
+| API | FastAPI, SQLAlchemy, Alembic, PostgreSQL, JWT sign-in with refresh tokens, Argon2 |
+| Dashboard | React, TypeScript, Tailwind, TanStack Query, Recharts |
+| Tests | pytest (against a real PostgreSQL), Vitest, Playwright in a real browser |
+| Delivery | Docker, Docker Compose, GitHub Actions, Render, Neon, Sentry |
+
 
 ## How it works
 
@@ -176,6 +210,9 @@ backend/                the API (FastAPI + PostgreSQL)
     schemas.py          request and response shapes (Pydantic)
     ingest.py           applies the events a mirror sends
     auth.py             user accounts: passwords and login tokens
+    demo.py             the read-only demo account
+    simulator.py        makes up realistic workouts, as a mirror would send them
+    ratelimit.py        limits sign-in attempts
     security.py         device tokens
     routers/            the HTTP endpoints
   migrations/           database migrations (Alembic)
@@ -188,6 +225,7 @@ web/                    the dashboard (React + TypeScript)
     components/         charts, tables and small pieces
   e2e/                  Playwright tests in a real browser
 docker-compose.yml      runs the dashboard, the API and the database
+render.yaml             deploys the API and the dashboard on Render
 ```
 
 Everything except `pose.py`, `hud.py` and `app.py` is plain Python with no
@@ -223,6 +261,7 @@ endpoint (the Authorize button signs in).
 | `POST /api/v1/auth/login` | anyone | Sign in with email and password |
 | `POST /api/v1/auth/refresh` | anyone | Swap a refresh token for a new pair |
 | `POST /api/v1/auth/logout` | anyone | Sign out: the refresh token stops working |
+| `POST /api/v1/auth/demo` | anyone | Sign in to the read-only demo account |
 | `GET /api/v1/users/me` | user | The signed-in user |
 | `GET /api/v1/devices` | user | Your mirrors |
 | `POST /api/v1/devices` | user | Add a mirror. Returns its token, once |
@@ -271,6 +310,27 @@ the system's dark mode and works on a phone.
 The access token is kept only in memory. When it expires, the app swaps the
 refresh token for a new pair once and repeats the request, so you stay signed
 in, also after a reload.
+
+## Deploying
+
+The live demo runs on free plans: the API and the dashboard on
+[Render](https://render.com), the database on [Neon](https://neon.tech).
+`render.yaml` describes both Render services, so setting it up is:
+
+1. Create a free PostgreSQL database on Neon and copy its connection string.
+2. On Render: New > Blueprint, pick this repository, and paste the connection
+   string as `DATABASE_URL` when asked. Render makes a random `JWT_SECRET`.
+3. Render builds both services and redeploys on every push to `main`.
+
+The API brings the database up to date on start (`alembic upgrade head`) and
+refuses to start in production without a proper `JWT_SECRET`. Sign-in attempts
+and new accounts are rate limited. Set `SENTRY_DSN` to get error reports.
+
+To fill the demo account by hand, or after turning it off and on:
+
+```
+python -m easyweight_api.demo
+```
 
 ## Development
 

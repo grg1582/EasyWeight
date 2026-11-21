@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 
 import type { DeviceCreated } from "../api/types";
 import { useAddDevice, useDevices, useRemoveDevice } from "../api/queries";
+import { useAuth } from "../auth/AuthContext";
 import { EmptyState, ErrorNote, PageHeader, Spinner } from "../components/ui";
 import { formatAgo, formatDate } from "../lib/format";
 
@@ -58,6 +59,7 @@ function NewMirror({ device, onDone }: { device: DeviceCreated; onDone: () => vo
 }
 
 export function MirrorsPage() {
+  const readOnly = useAuth().user?.is_demo ?? false;
   const devices = useDevices();
   const add = useAddDevice();
   const remove = useRemoveDevice();
@@ -89,7 +91,10 @@ export function MirrorsPage() {
           ) : (
             <ul className="card divide-y divide-line">
               {devices.data.map((d) => (
-                <li key={d.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                <li
+                  key={d.id}
+                  className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
+                >
                   <div>
                     <div className="font-medium">{d.name}</div>
                     <div className="text-sm text-muted">
@@ -99,63 +104,76 @@ export function MirrorsPage() {
                       <span className="text-faint"> · added {formatDate(d.created_at)}</span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="btn-danger px-3 py-1.5"
-                    disabled={remove.isPending}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Remove "${d.name}"? Its workouts are deleted too, and it can't send any more.`,
-                        )
-                      ) {
-                        remove.mutate(d.id);
-                      }
-                    }}
-                  >
-                    Remove
-                  </button>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      className="btn-danger px-3 py-1.5"
+                      disabled={remove.isPending}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Remove "${d.name}"? Its workouts are deleted too, and it can't send any more.`,
+                          )
+                        ) {
+                          remove.mutate(d.id);
+                        }
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
           )}
         </div>
 
-        <aside className="space-y-4">
-          <form onSubmit={submit} className="card space-y-3 p-5">
-            <h2 className="font-semibold">Add a mirror</h2>
-            <div>
-              <label htmlFor="mirror-name" className="label">
-                Name
-              </label>
-              <input
-                id="mirror-name"
-                className="input"
-                placeholder="Home mirror"
-                required
-                maxLength={100}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+        {readOnly ? (
+          <aside className="card h-fit p-5 text-sm text-muted">
+            <h2 className="mb-2 font-semibold text-ink">This is the demo</h2>
+            Its mirror sends made-up workouts. Create an account to connect your own mirror.
+          </aside>
+        ) : (
+          <aside className="space-y-4">
+            <form onSubmit={submit} className="card space-y-3 p-5">
+              <h2 className="font-semibold">Add a mirror</h2>
+              <div>
+                <label htmlFor="mirror-name" className="label">
+                  Name
+                </label>
+                <input
+                  id="mirror-name"
+                  className="input"
+                  placeholder="Home mirror"
+                  required
+                  maxLength={100}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+              {add.isError && (
+                <p role="alert" className="text-sm text-danger">
+                  {add.error.message}
+                </p>
+              )}
+              <button
+                type="submit"
+                className="btn-primary w-full"
+                disabled={add.isPending || !name.trim()}
+              >
+                Add mirror
+              </button>
+            </form>
+            <div className="card p-5 text-sm text-muted">
+              <h2 className="mb-2 font-semibold text-ink">Or from the mirror itself</h2>
+              <p className="mb-3">Run this on the mirror, in the device folder:</p>
+              <CopyBlock
+                label="Register command"
+                text={`python -m easyweight.register --api-url ${window.location.origin} --name "Home mirror" --email you@example.com`}
               />
             </div>
-            {add.isError && (
-              <p role="alert" className="text-sm text-danger">
-                {add.error.message}
-              </p>
-            )}
-            <button type="submit" className="btn-primary w-full" disabled={add.isPending || !name.trim()}>
-              Add mirror
-            </button>
-          </form>
-          <div className="card p-5 text-sm text-muted">
-            <h2 className="mb-2 font-semibold text-ink">Or from the mirror itself</h2>
-            <p className="mb-3">Run this on the mirror, in the device folder:</p>
-            <CopyBlock
-              label="Register command"
-              text={`python -m easyweight.register --api-url ${window.location.origin} --name "Home mirror" --email you@example.com`}
-            />
-          </div>
-        </aside>
+          </aside>
+        )}
       </div>
     </>
   );

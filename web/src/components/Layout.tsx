@@ -21,6 +21,18 @@ export function Layout() {
   const { user, signOut } = useAuth();
   return (
     <div className="min-h-screen">
+      {user?.is_demo && (
+        <div className="bg-accent px-4 py-2 text-center text-sm text-accent-ink">
+          You're looking at a demo with made-up workouts.{" "}
+          <button
+            type="button"
+            className="font-semibold underline underline-offset-2"
+            onClick={() => void signOut()}
+          >
+            Create your own account
+          </button>
+        </div>
+      )}
       <header className="border-b border-line bg-surface">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
           <Logo />

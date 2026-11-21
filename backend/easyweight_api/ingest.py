@@ -1,12 +1,13 @@
 """Applies the events a device sends to the workout tables.
 
-Each event is handled on its own: a duplicate is skipped, a bad one is
+Each event gets its own result: a duplicate is skipped, a bad one is
 rejected with a reason, and neither stops the rest of the batch. That matters
 for a device sending a backlog after being offline: one bad event mustn't
 block everything behind it forever.
 """
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -26,24 +27,53 @@ class Rejected(Exception):
     pass
 
 
+def _store(db: Session, device: Device, event) -> None:
+    db.add(Event(id=event.id, device_id=device.id, type=event.type,
+                 occurred_at=event.at, data=event.data.model_dump(mode="json")))
+    _apply(db, device, event)
+
+
+def _one(db: Session, device: Device, event) -> EventResult:
+    try:
+        with db.begin_nested():  # a savepoint: undo just this event if it fails
+            _store(db, device, event)
+            db.flush()
+        return EventResult(id=event.id, status="applied")
+    except IntegrityError as e:
+        return EventResult(id=event.id, status="rejected",
+                           reason=f"conflicts with stored data: {e.orig}")
+    except Rejected as e:
+        return EventResult(id=event.id, status="rejected", reason=str(e))
+
+
 def ingest(db: Session, device: Device, events) -> EventBatchResult:
-    results = []
+    ids = [event.id for event in events]
+    stored = set(db.scalars(select(Event.id).where(Event.id.in_(ids)))) if ids else set()
+    fresh, seen = [], set(stored)
     for event in events:
-        if db.get(Event, event.id) is not None:  # sent before, e.g. after a lost connection
-            results.append(EventResult(id=event.id, status="duplicate"))
-            continue
-        try:
-            with db.begin_nested():  # a savepoint: undo just this event if it fails
-                db.add(Event(id=event.id, device_id=device.id, type=event.type,
-                             occurred_at=event.at, data=event.data.model_dump(mode="json")))
-                _apply(db, device, event)
-                db.flush()
-            results.append(EventResult(id=event.id, status="applied"))
-        except IntegrityError as e:
-            results.append(EventResult(id=event.id, status="rejected",
-                                       reason=f"conflicts with stored data: {e.orig}"))
-        except Rejected as e:
-            results.append(EventResult(id=event.id, status="rejected", reason=str(e)))
+        if event.id not in seen:
+            seen.add(event.id)
+            fresh.append(event)
+    outcome: dict = {}  # event id -> its EventResult, for the fresh ones
+
+    # Usually every event is fine: apply them all at once, which is much faster
+    # for a long backlog. If one fails, undo that and go one event at a time
+    try:
+        with db.begin_nested():
+            for event in fresh:
+                _store(db, device, event)
+            db.flush()
+        for event in fresh:
+            outcome[event.id] = EventResult(id=event.id, status="applied")
+    except (IntegrityError, Rejected):
+        for event in fresh:
+            outcome[event.id] = _one(db, device, event)
+
+    # One result per event sent, in the order sent. Sent before (say, after a
+    # lost connection), or twice in this batch: "duplicate"
+    results = [outcome.pop(event.id, None) or EventResult(id=event.id, status="duplicate")
+               for event in events]
+
     # When the mirror last got in touch (not when its events happened: an
     # offline backlog can be days old)
     device.last_seen_at = datetime.now(UTC)

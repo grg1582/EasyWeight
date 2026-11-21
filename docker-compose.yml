@@ -30,6 +30,8 @@ services:
       # Signs login tokens. Fine for your own computer; set a long random one
       # anywhere else (for example in a .env file next to this one)
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-in-production}
+      # Each end-to-end test run signs up new users; allow many on your computer
+      SIGNUPS_PER_HOUR: 1000
     ports:
       - "8000:8000"
     depends_on:
