@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from ..auth import current_user
 from ..db import get_db
-from ..models import Workout
+from ..models import Device, User, Workout
 from ..schemas import SetOut, WorkoutDetail, WorkoutPage, WorkoutSummary
 
 router = APIRouter(prefix="/api/v1/workouts", tags=["workouts"])
@@ -32,10 +33,11 @@ def list_workouts(
     device_id: uuid.UUID | None = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    """Workouts, newest first. Phase 4 limits this to the signed-in user's own"""
-    query = select(Workout)
+    """The signed-in user's workouts, from all their mirrors or one, newest first"""
+    query = select(Workout).join(Device).where(Device.owner_id == user.id)
     if device_id:
         query = query.where(Workout.device_id == device_id)
     total = db.scalar(select(func.count()).select_from(query.subquery()))
@@ -49,9 +51,15 @@ def list_workouts(
 
 
 @router.get("/{workout_id}", response_model=WorkoutDetail)
-def get_workout(workout_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_workout(workout_id: uuid.UUID, user: User = Depends(current_user),
+                db: Session = Depends(get_db)):
+    """One workout with its sets. Someone else's workout is "not found", so
+    ids can't be probed"""
     workout = db.scalar(
-        select(Workout).where(Workout.id == workout_id).options(selectinload(Workout.sets))
+        select(Workout)
+        .join(Device)
+        .where(Workout.id == workout_id, Device.owner_id == user.id)
+        .options(selectinload(Workout.sets))
     )
     if workout is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Workout not found")

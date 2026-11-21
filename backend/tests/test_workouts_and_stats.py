@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from conftest import Mirror
+from conftest import Mirror, sign_up
 
 
 def make_workout(send, start, sets):
@@ -38,7 +38,7 @@ def test_filter_by_device(client, send, device):
     assert client.get(f"/api/v1/workouts?device_id={other['id']}").json()["total"] == 0
 
 
-def test_unknown_workout(client):
+def test_unknown_workout(client, user):
     r = client.get("/api/v1/workouts/00000000-0000-0000-0000-000000000000")
     assert r.status_code == 404
 
@@ -57,6 +57,20 @@ def test_stats(client, send):
     assert s["per_day"][-1]["date"] == today.date().isoformat()
 
 
-def test_stats_when_empty(client):
+def test_stats_when_empty(client, user):
     s = client.get("/api/v1/stats").json()
     assert s == {"days": 30, "workouts": 0, "per_exercise": [], "per_day": []}
+
+
+def test_workouts_and_stats_need_a_signed_in_user(client):
+    assert client.get("/api/v1/workouts").status_code == 401
+    assert client.get("/api/v1/stats").status_code == 401
+
+
+def test_users_only_see_their_own_workouts(client, send):
+    workout_id = make_workout(send, datetime.now(UTC), [("curl", 5, 1)])
+    dana = sign_up(client, "dana@example.com")["headers"]
+    assert client.get("/api/v1/workouts", headers=dana).json() == {"items": [], "total": 0}
+    assert client.get(f"/api/v1/workouts/{workout_id}", headers=dana).status_code == 404
+    assert client.get("/api/v1/stats", headers=dana).json()["workouts"] == 0
+    assert client.get(f"/api/v1/workouts/{workout_id}").status_code == 200

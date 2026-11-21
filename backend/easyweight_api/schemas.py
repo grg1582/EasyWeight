@@ -4,9 +4,37 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, EmailStr, Field
 
 from .models import Exercise, Side
+
+# Users and sign-in
+
+
+class UserCreate(BaseModel):
+    email: EmailStr = Field(examples=["roy@example.com"])
+    password: str = Field(min_length=8, max_length=128)
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    email: str
+    created_at: datetime
+
+
+class TokenPair(BaseModel):
+    access_token: str = Field(description="Send as \"Authorization: Bearer <token>\". "
+                                          "Lasts 15 minutes")
+    refresh_token: str = Field(description="Swap it for a new pair at /api/v1/auth/refresh. "
+                                           "Works once, lasts 30 days")
+    token_type: Literal["bearer"] = "bearer"
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
 
 # Devices
 

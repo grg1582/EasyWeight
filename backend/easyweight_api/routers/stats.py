@@ -5,8 +5,9 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.orm import Session
 
+from ..auth import current_user
 from ..db import get_db
-from ..models import Workout, WorkoutSet
+from ..models import Device, User, Workout, WorkoutSet
 from ..schemas import DayStats, ExerciseStats, Stats
 
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
@@ -16,15 +17,17 @@ router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
 def stats(
     device_id: uuid.UUID | None = None,
     days: int = Query(30, ge=1, le=365),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    """Totals for the last `days` days: sets and reps per exercise, and reps per
-    day (UTC dates). Computed by the database, not in Python"""
+    """The signed-in user's totals for the last `days` days: sets and reps per
+    exercise, and reps per day (UTC dates). Computed by the database, not in Python"""
     since = datetime.now(UTC) - timedelta(days=days)
     sets = (
         select(WorkoutSet)
         .join(Workout)
-        .where(WorkoutSet.started_at >= since)
+        .join(Device)
+        .where(Device.owner_id == user.id, WorkoutSet.started_at >= since)
     )
     if device_id:
         sets = sets.where(Workout.device_id == device_id)

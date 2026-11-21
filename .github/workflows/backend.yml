@@ -2,9 +2,11 @@ name: Backend
 
 on:
   push:
-    paths: ["backend/**", "docker-compose.yml", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "web/Dockerfile", "web/nginx.conf", "docker-compose.yml",
+            ".github/workflows/backend.yml"]
   pull_request:
-    paths: ["backend/**", "docker-compose.yml", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "web/Dockerfile", "web/nginx.conf", "docker-compose.yml",
+            ".github/workflows/backend.yml"]
 
 jobs:
   test:
@@ -35,12 +37,16 @@ jobs:
       - run: pytest -v
 
   docker:
-    # The image must build and the API must answer /health against a real database
+    # The images must build, the API must answer /health against a real
+    # database, and the dashboard must serve its page and pass /api through
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker compose up --build --detach --wait
       - run: curl --fail http://localhost:8000/health
+      - run: curl --fail --silent http://localhost:8080/ | grep -q "<title>EasyWeight</title>"
+      - name: /api through nginx reaches the backend (401 = it answered "not signed in")
+        run: test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/v1/users/me)" = 401
       - if: failure()
         run: docker compose logs
       - run: docker compose down

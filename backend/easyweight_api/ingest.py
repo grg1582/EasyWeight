@@ -5,6 +5,8 @@ rejected with a reason, and neither stops the rest of the batch. That matters
 for a device sending a backlog after being offline: one bad event mustn't
 block everything behind it forever.
 """
+from datetime import UTC, datetime
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -42,8 +44,9 @@ def ingest(db: Session, device: Device, events) -> EventBatchResult:
                                        reason=f"conflicts with stored data: {e.orig}"))
         except Rejected as e:
             results.append(EventResult(id=event.id, status="rejected", reason=str(e)))
-    if events:
-        device.last_seen_at = max(e.at for e in events)
+    # When the mirror last got in touch (not when its events happened: an
+    # offline backlog can be days old)
+    device.last_seen_at = datetime.now(UTC)
     db.commit()
     count = lambda s: sum(r.status == s for r in results)  # noqa: E731
     return EventBatchResult(applied=count("applied"), duplicates=count("duplicate"),
