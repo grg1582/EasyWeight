@@ -7,3 +7,11 @@ __pycache__/
 # Pose models (downloaded automatically on first run)
 *.task
 *.task.part
+
+# Test and lint caches
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Local settings (may hold passwords)
+.env
