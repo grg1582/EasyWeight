@@ -1,5 +1,0 @@
-mediapipe
-numpy
-opencv-python
-pillow
-certifi

@@ -1,0 +1,39 @@
+name: Device
+
+on:
+  push:
+    paths: ["device/**", ".github/workflows/device.yml"]
+  pull_request:
+    paths: ["device/**", ".github/workflows/device.yml"]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: device
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff
+      - run: ruff check .
+
+  test:
+    # The counting logic is pure Python, so the tests don't need MediaPipe,
+    # OpenCV or a camera, and run on every supported Python version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: device
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install pytest
+      - run: pytest -v

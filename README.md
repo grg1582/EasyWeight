@@ -65,23 +65,32 @@ right away.
 Requires Python 3.9+ (tested on 3.13) and a webcam
 
 ```
+cd device
 python -m venv .venv
 .venv\Scripts\activate          # Windows
 source .venv/bin/activate       # macOS / Linux
-pip install -r requirements.txt
+pip install -e .
 ```
 
-The pose model (6–31 MB depending on the version) downloads automatically the
-first time you run the script.
+The pose model (6–31 MB depending on the version) downloads automatically into
+`device/models/` the first time you run it.
 
 ## Usage
 
 ```
-python curl_counter.py                  # default webcam, "full" model
-python curl_counter.py --camera 1       # use a different webcam
-python curl_counter.py --model lite     # faster on slower computers
-python curl_counter.py --model heavy    # most accurate
-python curl_counter.py --fullscreen     # start fullscreen (for the mirror)
+python -m easyweight                    # default webcam, "full" model
+python -m easyweight --camera 1         # use a different webcam
+python -m easyweight --model lite       # faster on slower computers
+python -m easyweight --model heavy      # most accurate
+python -m easyweight --fullscreen       # start fullscreen (for the mirror)
+python -m easyweight --record set.jsonl.gz   # also save the pose of every frame
+```
+
+A recording holds only the pose points, no video, and can be replayed through
+the rep counter without a camera:
+
+```
+python -m easyweight.replay set.jsonl.gz
 ```
 
 ### Keys
@@ -97,8 +106,8 @@ These also work on a Hebrew keyboard layout.
 
 ## Tuning
 
-If reps are missed or counted when they shouldn't be, adjust the constants at
-the top of `curl_counter.py`. While running, the terminal prints the top angle
+If reps are missed or counted when they shouldn't be, adjust the constants in
+`device/easyweight/config.py`. While running, the terminal prints the top angle
 (or height) of every rep and how close the wrist came to the mouth.
 
 | Constant             | Default | Meaning                                          |
@@ -118,10 +127,46 @@ the top of `curl_counter.py`. While running, the terminal prints the top angle
 | `AWAY_RESET_SECONDS` | 10      | Reset the count after nobody is seen this long   |
 | `DRINK_DISTANCE`     | 0.52    | During rest, a lift where the wrist comes closer to the mouth than this (in shoulder widths) is drinking |
 
+## Project structure
+
+```
+device/                 the mirror app (Python)
+  easyweight/
+    config.py           tuning constants
+    geometry.py         angles and distances from the pose points
+    counter.py          rep and set logic (ArmCounter, Workout)
+    engine.py           feeds one frame into the workout
+    recording.py        saving and loading pose recordings
+    replay.py           counts the reps in a recording
+    pose.py             the MediaPipe pose model
+    hud.py              drawing the mirror display
+    app.py              camera, window, keys and the main loop
+  tests/                pytest tests
+  models/               pose models (downloaded, not in git)
+```
+
+Everything from `config.py` to `replay.py` is plain Python with no camera, OpenCV
+or MediaPipe, so it runs anywhere and is fully tested.
+
+## Development
+
+```
+cd device
+pip install -e ".[dev]"
+pytest                  # run the tests
+ruff check .            # lint
+```
+
+The tests build synthetic poses (`tests/poses.py`) and play whole sessions
+through the counter: sets, rests, drinking during a rest, switching exercise,
+walking away. Real recordings in `tests/recordings/` are replayed too, see
+[its README](device/tests/recordings/README.md). GitHub Actions runs the lint
+and the tests on every push.
+
 ## License
 
 [MIT](LICENSE)
 
 The screen text uses the [Inter Display](https://github.com/rsms/inter) font
-(`fonts/InterDisplay-SemiBold.ttf`), included under the SIL Open Font License
-1.1. See [fonts/Inter-LICENSE.txt](fonts/Inter-LICENSE.txt).
+(`device/easyweight/fonts/InterDisplay-SemiBold.ttf`), included under the SIL Open Font License
+1.1. See [Inter-LICENSE.txt](device/easyweight/fonts/Inter-LICENSE.txt).
