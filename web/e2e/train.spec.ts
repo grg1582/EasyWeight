@@ -23,7 +23,7 @@ test("train with the camera", async ({ page }) => {
   await page.getByRole("button", { name: "Start camera" }).click();
   // Loading MediaPipe and downloading the model take a few seconds the first time
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("Step into view")).toBeVisible();
+  await expect(page.getByText("Step into view")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByLabel("Reps")).toHaveText("0");
 
   // Full screen and back. Real full screen stalls headless Chromium on CI, so
