@@ -49,6 +49,7 @@ class DeviceOut(BaseModel):
 
     id: uuid.UUID
     name: str
+    kind: Literal["mirror", "browser"]
     created_at: datetime
     last_seen_at: datetime | None
 

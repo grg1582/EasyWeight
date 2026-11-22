@@ -22,6 +22,7 @@ device/data/
 # Web dashboard: installed packages, builds and test reports
 node_modules/
 web/dist/
+web/public/mediapipe/
 web/test-results/
 web/playwright-report/
 *.tsbuildinfo

@@ -98,6 +98,7 @@ export function MirrorsPage() {
                   <div>
                     <div className="font-medium">{d.name}</div>
                     <div className="text-sm text-muted">
+                      {d.kind === "browser" && "Workouts from the Train page · "}
                       {d.last_seen_at
                         ? `Last sent ${formatAgo(d.last_seen_at)}`
                         : "Hasn't sent anything yet"}
