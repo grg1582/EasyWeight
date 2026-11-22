@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeApi } from "../test/fakeApi";
 import { framesOf } from "../train/parity";
 import type { PoseDetector } from "../train/pose";
-import { TrainPage, type TrainDeps } from "./TrainPage";
+import { restClock, TrainPage, type TrainDeps } from "./TrainPage";
 
 const auth = vi.hoisted(() => ({ isDemo: false }));
 vi.mock("../auth/AuthContext", () => ({
@@ -72,9 +72,12 @@ describe("TrainPage", () => {
     await waitFor(() => expect(screen.getByLabelText("Reps")).toHaveTextContent("10"), {
       timeout: 5000,
     });
-    const current = screen.getByRole("region", { name: "Current set" });
-    expect(within(current).getAllByText("Bicep curl")).toHaveLength(2); // the set, and the list
-    expect(within(current).getByRole("list", { name: "Sets" })).toHaveTextContent("Set 1Bicep curl10 reps");
+    // On the camera view, as on the mirror: the exercise, the count and the set
+    const stage = screen.getByRole("region", { name: "Camera view" });
+    expect(within(stage).getByText("Bicep curl")).toBeInTheDocument();
+    expect(within(stage).getByText("SET 1")).toBeInTheDocument();
+    const session = screen.getByRole("region", { name: "This session" });
+    expect(within(session).getByRole("list", { name: "Sets" })).toHaveTextContent("Set 1Bicep curl10 reps");
 
     await userEvent.click(screen.getByRole("button", { name: "Stop" }));
     const summary = await screen.findByRole("region", { name: "Summary" });
@@ -104,6 +107,49 @@ describe("TrainPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Stop" }));
     expect(await screen.findByText(/nothing was saved/)).toBeInTheDocument();
     expect(calls.filter((c) => c.path === "/events/browser")).toEqual([]);
+  });
+
+  it("shows the rest time after 8 seconds without a rep, like the mirror", async () => {
+    fakeApi({ "POST /events/browser": () => ({ body: { applied: 1 } }) });
+    const realNow = performance.now.bind(performance);
+    let later = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => realNow() + later);
+    renderPage(fakes().deps);
+    await userEvent.click(screen.getByRole("button", { name: "Start camera" }));
+    await waitFor(() => expect(screen.getByLabelText("Reps")).toHaveTextContent("10"), {
+      timeout: 5000,
+    });
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+
+    later = 65_000; // a minute after the last rep
+    const timer = await screen.findByRole("timer", { name: "Rest time" });
+    expect(timer.textContent).toMatch(/^1:0[5-6]$/);
+    expect(screen.getByText("REST · SET 1 DONE")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Reps")).not.toBeInTheDocument();
+  });
+
+  it("goes full screen, and back", async () => {
+    fakeApi({});
+    renderPage(fakes().deps);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Start camera" }));
+    const stage = await screen.findByRole("region", { name: "Camera view" });
+    expect(stage).not.toHaveClass("fixed");
+
+    // jsdom can't go full screen, like Safari on iPhone: the view fills the window
+    await user.click(screen.getByRole("button", { name: "Full screen" }));
+    expect(stage).toHaveClass("fixed", "inset-0");
+    expect(stage).not.toHaveClass("relative"); // it would win over "fixed" in the CSS
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(stage).not.toHaveClass("fixed");
+    expect(screen.getByRole("button", { name: "Full screen" })).toBeInTheDocument();
+  });
+
+  it("writes the rest time like the mirror", () => {
+    expect(restClock(0)).toBe("0:00");
+    expect(restClock(9.7)).toBe("0:09");
+    expect(restClock(125)).toBe("2:05");
   });
 
   it("explains a blocked camera and lets you try again", async () => {

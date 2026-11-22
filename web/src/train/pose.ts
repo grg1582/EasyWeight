@@ -19,6 +19,22 @@ export interface PoseDetector {
   close(): void;
 }
 
+/** True when WebGL is drawn by the processor (SwiftShader, llvmpipe), as on
+ * computers without a usable graphics card. The GPU delegate is then about 5
+ * times slower than the CPU one, and it keeps the page too busy to respond */
+export function softwareWebGL(): boolean {
+  try {
+    const gl = document.createElement("canvas").getContext("webgl");
+    if (!gl) return true;
+    const info = gl.getExtension("WEBGL_debug_renderer_info");
+    const renderer = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "";
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+    return /swiftshader|llvmpipe|software/i.test(renderer);
+  } catch {
+    return true;
+  }
+}
+
 export async function loadPoseDetector(): Promise<PoseDetector> {
   const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
   const fileset = await FilesetResolver.forVisionTasks("/mediapipe");
@@ -33,9 +49,10 @@ export async function loadPoseDetector(): Promise<PoseDetector> {
     });
   let landmarker;
   try {
+    if (softwareWebGL()) throw new Error("no graphics card");
     landmarker = await create("GPU");
   } catch {
-    landmarker = await create("CPU"); // no WebGL, e.g. some phones and VMs
+    landmarker = await create("CPU"); // no WebGL or only a software one, e.g. some phones and VMs
   }
   return {
     detect(video, timestampMs) {
