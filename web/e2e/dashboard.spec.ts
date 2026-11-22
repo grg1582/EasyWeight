@@ -45,6 +45,9 @@ test("sign up, add a mirror, and see its workout", async ({ page, request }) => 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   await page.getByRole("link", { name: "Create one" }).click();
+  // Wait for the new page: the sign-in form has an Email field too, and typing
+  // into it just before the page changes loses the email
+  await expect(page.getByRole("heading", { name: "Create an account" })).toBeVisible();
 
   await page.getByLabel("Email").fill(newEmail());
   await page.getByLabel("Password").fill("a good long password");
