@@ -18,8 +18,9 @@ your training over time.
 
 **Live demo: [easyweight.onrender.com](https://easyweight.onrender.com)**.
 Press *Try the demo* to look around an account with two months of simulated
-workouts, no sign-up needed. (It runs on a free plan that sleeps when nobody
-uses it, so the first visit can take a minute to wake up.)
+workouts, no sign-up needed, then open *Train* to count your own reps with
+your webcam, right in the browser. (It runs on a free plan that sleeps when
+nobody uses it, so the first visit can take a minute to wake up.)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Images/dashboard-dark.png">
@@ -217,7 +218,8 @@ web/                    the dashboard (React + TypeScript)
   src/
     api/                talking to the backend, staying signed in
     auth/               who is signed in
-    pages/              dashboard, workouts, one workout, mirrors, sign-in
+    pages/              dashboard, workouts, one workout, train, mirrors, sign-in
+    train/              rep counting in the browser (a copy of the mirror's)
     components/         charts, tables and small pieces
   e2e/                  Playwright tests in a real browser
 docker-compose.yml      runs the dashboard, the API and the database
@@ -264,6 +266,7 @@ endpoint (the Authorize button signs in).
 | `DELETE /api/v1/devices/{id}` | user | Remove a mirror and its workouts |
 | `GET /api/v1/devices/me` | mirror | The mirror a token belongs to |
 | `POST /api/v1/events` | mirror | A mirror sends events |
+| `POST /api/v1/events/browser` | user | The same events, from the Train page |
 | `GET /api/v1/workouts` | user | Your workouts, newest first, with paging |
 | `GET /api/v1/workouts/{id}` | user | One workout and its sets |
 | `GET /api/v1/stats` | user | Sets and reps per exercise, and reps per day |
@@ -302,6 +305,25 @@ React, TypeScript and Tailwind, with TanStack Query for loading data and
 Recharts for the charts. Sign up, add a mirror, and see your training: reps
 per day, reps and sets per exercise, every workout and its sets. It follows
 the system's dark mode and works on a phone.
+
+### Training in the browser
+
+The *Train* page counts reps with the webcam, no mirror needed. MediaPipe's
+pose model runs in the browser (WebAssembly, on the GPU when there is one), so
+the video never leaves the device: only the events are sent, the same ones a
+mirror sends, and the workout is saved under a "Web browser" device.
+
+The counting logic is a TypeScript copy of the mirror's (`web/src/train`). To
+keep the two from drifting apart, `device/tests/web_parity.py` runs sessions of
+synthetic poses through the Python counter and saves the poses with every rep,
+set and event it produced to `web/src/train/parity.json`. The web tests replay
+the same poses and must get exactly the same results, and a Python test fails
+if the file is out of date. After changing the counting logic:
+
+```bash
+cd device
+python tests/web_parity.py
+```
 
 The access token is kept only in memory. When it expires, the app swaps the
 refresh token for a new pair once and repeats the request, so you stay signed

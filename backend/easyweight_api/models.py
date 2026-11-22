@@ -21,6 +21,7 @@ from sqlalchemy import (
     Integer,
     String,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -72,6 +73,8 @@ class RefreshToken(Base):
 
 class Device(Base):
     __tablename__ = "devices"
+    __table_args__ = (Index("uq_devices_one_browser_per_owner", "owner_id", unique=True,
+                            postgresql_where=text("kind = 'browser'")),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     # Empty for mirrors registered before user accounts existed
@@ -79,6 +82,8 @@ class Device(Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     name: Mapped[str] = mapped_column(String(100))
+    # "mirror", or "browser" for workouts done with the camera on the dashboard
+    kind: Mapped[str] = mapped_column(String(20), default="mirror", server_default="mirror")
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

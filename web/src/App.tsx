@@ -6,6 +6,7 @@ import { EmptyState, Spinner } from "./components/ui";
 import { LoginPage, RegisterPage } from "./pages/AuthPages";
 import { DashboardPage } from "./pages/DashboardPage";
 import { MirrorsPage } from "./pages/MirrorsPage";
+import { TrainPage } from "./pages/TrainPage";
 import { WorkoutPage } from "./pages/WorkoutPage";
 import { WorkoutsPage } from "./pages/WorkoutsPage";
 
@@ -53,6 +54,7 @@ export function App() {
         <Route index element={<DashboardPage />} />
         <Route path="workouts" element={<WorkoutsPage />} />
         <Route path="workouts/:id" element={<WorkoutPage />} />
+        <Route path="train" element={<TrainPage />} />
         <Route path="mirrors" element={<MirrorsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

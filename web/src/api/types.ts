@@ -18,6 +18,8 @@ export interface User {
 export interface Device {
   id: string;
   name: string;
+  /** "browser" holds the workouts done with the camera on the Train page */
+  kind: "mirror" | "browser";
   created_at: string;
   last_seen_at: string | null;
 }
