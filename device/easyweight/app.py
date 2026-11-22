@@ -188,7 +188,8 @@ def main(argv=None):
                 outbox.add(reporter.observe(engine.workout, now))
 
             canvas = render(window_size(), engine.workout, now, flash=now < flash_until,
-                            frame=frame if show_camera else None, cue=coach.text(now))
+                            frame=frame if show_camera else None, cue=coach.text(now),
+                            summary=coach.summary(engine.workout))
             cv2.imshow(WINDOW, canvas)
 
             action = key_action(cv2.waitKeyEx(1))

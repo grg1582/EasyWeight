@@ -76,7 +76,7 @@ def draw_texts(canvas, texts):
                     color, thickness, cv2.LINE_AA)
 
 
-def draw_hud(canvas, texts, workout, now, flash, cue=None):
+def draw_hud(canvas, texts, workout, now, flash, cue=None, summary=None):
     """Draw the mirror display. Everything scales with the window size
 
     Only the time and date (top left) and the exercise and the count (or the
@@ -102,6 +102,11 @@ def draw_hud(canvas, texts, workout, now, flash, cue=None):
         add_text(texts, f"{minutes}:{seconds:02d}", cx, H * 0.24, 190 * s, CYAN)
         add_text(texts, f"REST - SET {workout.set} DONE", cx, H * 0.24 + 120 * s,
                  30 * s, LIGHT_GRAY)
+        if summary:  # from the coach: how the set went, and what to do next
+            done, advice = summary
+            add_text(texts, done, cx, H * 0.24 + 180 * s, 30 * s, WHITE)
+            add_text(texts, advice, cx, H * 0.24 + 225 * s, 30 * s,
+                     WHITE if advice.startswith("Tip") else AMBER)
     else:
         reps = max(left.reps, right.reps)
         add_text(texts, str(reps), cx, H * 0.24, 190 * s, GREEN if flash else WHITE)
@@ -122,15 +127,16 @@ def draw_camera(canvas, frame):
     canvas[y0:y0 + dh, x0:x0 + dw] = cv2.convertScaleAbs(view, alpha=0.45)
 
 
-def render(size, workout, now, flash, frame=None, cue=None):
+def render(size, workout, now, flash, frame=None, cue=None, summary=None):
     """A full HUD image of size (width, height). frame is the camera picture to
     show behind it, or None for a black background. cue is the coach's
-    feedback to show under the count, if any"""
+    feedback to show under the count, and summary its (how it went, what to do
+    next) to show during the rest, if any"""
     W, H = size
     canvas = np.zeros((H, W, 3), np.uint8)
     texts = []
     if frame is not None:
         draw_camera(canvas, frame)
-    draw_hud(canvas, texts, workout, now, flash, cue)
+    draw_hud(canvas, texts, workout, now, flash, cue, summary)
     draw_texts(canvas, texts)
     return canvas

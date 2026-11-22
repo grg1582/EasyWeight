@@ -50,7 +50,18 @@ the count for a few seconds:
 | *Curl all the way up* (or *Raise to shoulder height*, *Press all the way up*) | An arm got at least halfway through a rep, then went back down without finishing it |
 | *Slow down: control the weight* | Two reps of the same arm less than 0.9 seconds apart |
 
-Each set starts with a clean slate, and the coach stays quiet during the rest.
+Each set starts with a clean slate. During the rest after a set, the coach
+sums it up under the rest timer, with one thing to do on the next set:
+
+| After the set | Next to it |
+|---------------|-----------|
+| *10 reps · 2 partial* | *Next set: all the way up, all the way down* (for each exercise its own) |
+| *10 reps · 3 too fast* | *Next set: 2 seconds up, 2 seconds down* |
+| *Clean set: 10 reps* | A form tip for the exercise, a different one each set, like *Tip: keep your elbows pinned to your sides* |
+
+When a set had both, whichever happened more decides the advice, and partial
+reps win a tie: the range matters more than the pace.
+
 The mirror (`device/easyweight/coach.py`) and the browser
 (`web/src/train/coach.ts`) have the same coach, tested with the same cases.
 

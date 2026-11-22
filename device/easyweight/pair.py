@@ -45,6 +45,9 @@ def pair(api_url, site_url, name, show, wait, request=api_request):
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     status, body = request("POST", api_url + "/api/v1/pairing",
                            {"token_hash": token_hash, "name": name})
+    if status == 404:
+        raise PairingFailed(f"{api_url} doesn't know QR pairing yet: deploy the latest API, "
+                            "or connect with python -m easyweight.register")
     if status != 201:
         raise PairingFailed(f"The server refused: HTTP {status} {body}")
     code = body["code"]

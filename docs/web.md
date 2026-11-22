@@ -36,7 +36,8 @@ is saved under a "Web browser" device.
 The camera view looks like the mirror's display: the time and date, the
 exercise, a big rep count that flashes green on every rep, and after 8 seconds
 without a rep, a rest timer. Under the count, the same coach as the mirror's
-says when a rep stopped halfway or the reps are too fast. It can go full
+says when a rep stopped halfway or the reps are too fast, and during the rest
+sums up the set with a tip for the next one. It can go full
 screen (on an iPhone, where a page can't, it fills the window instead).
 
 The model runs on the GPU when there is a real one. Where WebGL is drawn by the

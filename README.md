@@ -30,7 +30,7 @@ Open **[easyweight.onrender.com](https://easyweight.onrender.com)** and press **
 ## Highlights
 
 - **Computer vision that knows what you're doing.** MediaPipe pose landmarks become joint angles, and a state machine per arm counts reps of three exercises. The first rep of a set decides the exercise, 8 seconds of stillness starts a rest timer, and a sip of water during the rest isn't counted as a curl. [How the counting works](docs/how-counting-works.md)
-- **A coach, not just a counter.** A rep that stopped halfway gets "Curl all the way up", reps too fast to control the weight get "Slow down", right under the count.
+- **A coach, not just a counter.** A rep that stopped halfway gets "Curl all the way up", reps too fast to control the weight get "Slow down", right under the count. In the rest after each set it sums the set up ("10 reps · 2 partial") and says what to do on the next one, or gives a form tip for the exercise after a clean set.
 - **Live, and set up with a QR code.** Every rep reaches your open dashboards within a second over a WebSocket. A new mirror shows a QR code: scan it with your phone and it's connected, with no password typed on the mirror and its token never leaving it.
 - **One counting logic, two languages.** The mirror runs it in Python, the browser in TypeScript. A cross language parity suite plays the same synthetic sessions through both and requires the exact same reps, sets and events.
 - **Works offline, never double counts.** The mirror writes every event to a local SQLite outbox and sends it when the network is back. Each event carries its own id, so retries are harmless, and each gets its own result, so one bad event never blocks a backlog.

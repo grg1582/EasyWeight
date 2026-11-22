@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Coach, CUE_SECONDS } from "./coach";
+import { Coach, CUE_SECONDS, SLOW_TEXT } from "./coach";
 import { Workout } from "./counter";
 
 const FPS = 30;
@@ -73,5 +73,50 @@ describe("the coach", () => {
     play(workout, coach, REP, t, 8);
     expect(workout.set).toBe(2);
     expect(coach.fast).toBe(0);
+  });
+});
+
+/** Ten seconds without a rep: the set is over */
+function rest(workout: Workout, coach: Coach, t: number) {
+  t += 10;
+  coach.observe(workout, t);
+  expect(workout.resting(t)).toBe(true);
+  return t;
+}
+
+describe("the coach after a set", () => {
+  it("has nothing to sum up before the first rep", () => {
+    expect(new Coach().summary(new Workout())).toBeNull();
+  });
+
+  it("gives a tip after a clean set", () => {
+    const workout = new Workout();
+    const coach = new Coach();
+    rest(workout, coach, play(workout, coach, [...REP, ...REP, ...REP], 0, 8));
+    expect(coach.summary(workout)).toEqual(["Clean set: 3 reps", "Tip: keep your elbows pinned to your sides"]);
+  });
+
+  it("gives a different tip each set", () => {
+    const workout = new Workout();
+    const coach = new Coach();
+    let t = rest(workout, coach, play(workout, coach, [...REP, ...REP], 0, 8));
+    t = rest(workout, coach, play(workout, coach, [...REP, ...REP], t, 8));
+    expect(workout.set).toBe(2);
+    expect(coach.summary(workout)).toEqual(["Clean set: 2 reps", "Tip: no swinging, keep your back still"]);
+  });
+
+  it("asks for the full range after partial reps", () => {
+    const workout = new Workout();
+    const coach = new Coach();
+    const t = play(workout, coach, REP, 0, 8);
+    rest(workout, coach, play(workout, coach, [160, 120, 90, 90, 120, 160], t, 8));
+    expect(coach.summary(workout)).toEqual(["1 rep · 1 partial", "Next set: all the way up, all the way down"]);
+  });
+
+  it("asks to slow down after fast reps", () => {
+    const workout = new Workout();
+    const coach = new Coach();
+    rest(workout, coach, play(workout, coach, [...QUICK_REP, ...QUICK_REP], 0, 3));
+    expect(coach.summary(workout)).toEqual(["2 reps · 1 too fast", SLOW_TEXT]);
   });
 });

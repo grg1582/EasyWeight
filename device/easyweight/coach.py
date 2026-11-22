@@ -1,5 +1,6 @@
-"""Feedback on how the reps are done, shown under the count: a rep that
-stopped halfway, or reps done too fast to control the weight.
+"""Feedback on how the reps are done. During a set, a cue under the count when
+a rep stopped halfway or the reps are too fast to control the weight. During
+the rest after it, how the set went and one thing to do on the next one.
 
 The coach only watches the Workout and never changes what is counted. The
 browser has the same coach (web/src/train/coach.ts).
@@ -22,9 +23,42 @@ PARTIAL_TEXT = {
 }
 FAST_TEXT = "Slow down: control the weight"
 
+# What to do on the next set, after partial or too fast reps
+FULL_RANGE_TEXT = {
+    "curl": "Next set: all the way up, all the way down",
+    "raise": "Next set: lift to shoulder height every rep",
+    "press": "Next set: arms straight at the top, every rep",
+}
+SLOW_TEXT = "Next set: 2 seconds up, 2 seconds down"
+
+# After a clean set, a pointer on form for the next one, a different one each set
+TIPS = {
+    "curl": (
+        "Tip: keep your elbows pinned to your sides",
+        "Tip: no swinging, keep your back still",
+        "Tip: squeeze at the top, lower slowly",
+    ),
+    "raise": (
+        "Tip: lead with your elbows, not your hands",
+        "Tip: stop at shoulder height",
+        "Tip: keep a slight bend in your elbows",
+    ),
+    "press": (
+        "Tip: brace your core, don't arch your back",
+        "Tip: press straight up, biceps by your ears",
+        "Tip: lower to chin height, no lower",
+    ),
+}
+
 
 def cue_text(cue, exercise):
     return PARTIAL_TEXT[exercise] if cue == "partial" else FAST_TEXT
+
+
+def tip(exercise, set_number):
+    """The form tip for after a clean set"""
+    tips = TIPS[exercise]
+    return tips[(set_number - 1) % len(tips)]
 
 
 def _fresh():
@@ -72,6 +106,25 @@ class Coach:
         if not self.cue or not self.exercise or now - self.cue_at > CUE_SECONDS:
             return None
         return cue_text(self.cue, self.exercise)
+
+    def summary(self, workout):
+        """During the rest after a set: (how it went, what to do next), or None"""
+        if not self.exercise or self.set != workout.set:
+            return None
+        reps = workout.set_reps()
+        parts = [f"{reps} rep" if reps == 1 else f"{reps} reps"]
+        if self.partial:
+            parts.append(f"{self.partial} partial")
+        if self.fast:
+            parts.append(f"{self.fast} too fast")
+        if self.partial >= self.fast and self.partial:
+            advice = FULL_RANGE_TEXT[self.exercise]
+        elif self.fast:
+            advice = SLOW_TEXT
+        else:
+            parts[0] = f"Clean set: {parts[0]}"
+            advice = tip(self.exercise, self.set)
+        return " · ".join(parts), advice
 
     def _say(self, cue, now):
         self.cue, self.cue_at = cue, now

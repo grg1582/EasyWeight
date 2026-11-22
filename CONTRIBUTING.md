@@ -34,7 +34,7 @@ EasyWeight/
 │   │   ├── geometry.py          # Angles and distances from pose landmarks
 │   │   ├── counter.py           # Reps and sets: ArmCounter, Workout
 │   │   ├── engine.py            # Feeds one frame into the workout
-│   │   ├── coach.py             # Feedback: partial and too fast reps
+│   │   ├── coach.py             # Feedback on the reps, and on each set
 │   │   ├── reporter.py          # Turns the workout into events
 │   │   ├── sync.py              # SQLite outbox and the background sender
 │   │   ├── pair.py              # Connect the mirror by QR code

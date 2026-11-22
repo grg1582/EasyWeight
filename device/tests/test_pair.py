@@ -62,3 +62,12 @@ def test_the_qr_code_has_a_quiet_zone():
     assert image.shape[0] == image.shape[1] <= 300
     assert image[0].min() == 255 and image[:, 0].min() == 255  # white border
     assert image.min() == 0
+
+
+def test_a_server_without_pairing_says_what_to_do():
+    def old_server(method, url, body=None, token=None):
+        return 404, {"detail": "Not Found"}
+
+    with pytest.raises(PairingFailed, match="deploy the latest API"):
+        pair("https://api.example", "https://site.example", None,
+             show=lambda link, code: None, wait=lambda seconds: True, request=old_server)

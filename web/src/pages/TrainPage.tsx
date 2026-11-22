@@ -7,6 +7,7 @@ import { useAuth } from "../auth/AuthContext";
 import { ExerciseTag, PageHeader, Spinner } from "../components/ui";
 import { EXERCISES, formatNumber } from "../lib/format";
 import { ARMS, SHOULDERS, SIDES, type Exercise } from "../train/config";
+import type { Summary } from "../train/coach";
 import type { SetEntry } from "../train/counter";
 import type { Landmark } from "../train/geometry";
 import { loadPoseDetector, type PoseDetector } from "../train/pose";
@@ -46,6 +47,7 @@ interface View {
   resting: number | null; // seconds of rest, or null while training
   flash: boolean; // a rep was just counted: the count lights up green, as on the mirror
   cue: string | null; // feedback on the reps, like "Curl all the way up"
+  summary: Summary | null; // during the rest: how the set went, and what to do next
   progress: [number, number]; // left and right arm: 0 = down, 1 = up
   history: SetEntry[];
   unsent: number;
@@ -66,6 +68,7 @@ function snapshot(session: TrainingSession, seen: boolean, now: number): View {
     resting: resting ? workout.restTime(now) : null,
     flash: !resting && workout.lastRep !== null && now - workout.lastRep < FLASH_SECONDS,
     cue: resting ? null : session.coach.text(now),
+    summary: resting ? session.coach.summary(workout) : null,
     progress: [left.progress(), right.progress()],
     history: workout.history.map((entry) => ({ ...entry })),
     unsent: session.unsent,
@@ -224,6 +227,20 @@ function MirrorHud({ view }: { view: View }) {
           className="mirror-label absolute left-1/2 top-[50%] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-semibold tracking-normal text-[color:var(--mirror-amber)]"
         >
           {view.cue}
+        </div>
+      )}
+      {view.summary && (
+        <div
+          role="status"
+          aria-label="How the set went"
+          className="mirror-label absolute left-1/2 top-[48%] w-[92%] -translate-x-1/2 space-y-[1.2cqh] text-center tracking-normal"
+        >
+          <p className="font-semibold text-white">{view.summary[0]}</p>
+          <p
+            className={`font-semibold ${view.summary[1].startsWith("Tip") ? "text-white" : "text-[color:var(--mirror-amber)]"}`}
+          >
+            {view.summary[1]}
+          </p>
         </div>
       )}
     </div>

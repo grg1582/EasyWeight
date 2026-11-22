@@ -1,6 +1,7 @@
-"""The coach: feedback on partial and too fast reps. The same cases as the
+"""The coach: feedback on partial and too fast reps, and on each set in the rest
+after it. The same cases as the
 browser's coach.test.ts"""
-from easyweight.coach import CUE_SECONDS, Coach
+from easyweight.coach import CUE_SECONDS, SLOW_TEXT, Coach
 from easyweight.counter import Workout
 
 FPS = 30
@@ -66,3 +67,44 @@ def test_each_set_starts_over_and_the_rest_is_quiet():
     play(workout, coach, REP, t, hold=8)
     assert workout.set == 2
     assert coach.fast == 0
+
+
+def rest(workout, coach, t):
+    t += 10
+    coach.observe(workout, t)
+    assert workout.resting(t)
+    return t
+
+
+def test_nothing_to_sum_up_before_the_first_rep():
+    assert Coach().summary(Workout()) is None
+
+
+def test_after_a_clean_set_the_rest_shows_a_tip():
+    workout, coach = Workout(), Coach()
+    rest(workout, coach, play(workout, coach, REP * 3, 0, hold=8))
+    assert coach.summary(workout) == (
+        "Clean set: 3 reps", "Tip: keep your elbows pinned to your sides")
+
+
+def test_each_set_gets_a_different_tip():
+    workout, coach = Workout(), Coach()
+    t = rest(workout, coach, play(workout, coach, REP * 2, 0, hold=8))
+    t = rest(workout, coach, play(workout, coach, REP * 2, t, hold=8))
+    assert workout.set == 2
+    assert coach.summary(workout) == (
+        "Clean set: 2 reps", "Tip: no swinging, keep your back still")
+
+
+def test_after_partial_reps_the_rest_asks_for_the_full_range():
+    workout, coach = Workout(), Coach()
+    t = play(workout, coach, REP, 0, hold=8)
+    t = rest(workout, coach, play(workout, coach, [160, 120, 90, 90, 120, 160], t, hold=8))
+    assert coach.summary(workout) == (
+        "1 rep · 1 partial", "Next set: all the way up, all the way down")
+
+
+def test_after_fast_reps_the_rest_asks_to_slow_down():
+    workout, coach = Workout(), Coach()
+    rest(workout, coach, play(workout, coach, QUICK_REP * 2, 0, hold=3))
+    assert coach.summary(workout) == ("2 reps · 1 too fast", SLOW_TEXT)
