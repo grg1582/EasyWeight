@@ -17,7 +17,7 @@ test("train with the camera", async ({ page }) => {
   await page.getByLabel("Email").fill(`e2e-train-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`);
   await page.getByLabel("Password").fill("a good long password");
   await page.getByRole("button", { name: "Create account" }).click();
-  await page.getByRole("link", { name: "Train" }).click();
+  // Train is the first page after signing in
   await expect(page.getByText("Your video stays on your device")).toBeVisible();
 
   await page.getByRole("button", { name: "Start camera" }).click();
@@ -25,6 +25,15 @@ test("train with the camera", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText("Step into view")).toBeVisible();
   await expect(page.getByLabel("Reps")).toHaveText("0");
+
+  // Full screen and back
+  const stage = page.getByRole("region", { name: "Camera view" });
+  await page.getByRole("button", { name: "Full screen" }).click();
+  await expect(page.getByRole("button", { name: "Exit full screen" })).toBeVisible();
+  const box = (await stage.boundingBox())!;
+  expect(box.width).toBe(page.viewportSize()!.width);
+  await page.getByRole("button", { name: "Exit full screen" }).click();
+  await expect(page.getByRole("button", { name: "Full screen" })).toBeVisible();
 
   await page.getByRole("button", { name: "Stop" }).click();
   await expect(page.getByRole("region", { name: "Summary" })).toContainText("No reps this time");

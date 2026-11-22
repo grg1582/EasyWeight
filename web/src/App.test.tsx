@@ -87,10 +87,21 @@ describe("the dashboard app", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Wrong email or password");
   });
 
-  it("shows stats and recent workouts after signing in", async () => {
+  it("opens on the Train page after signing in", async () => {
     backend();
     renderApp();
     await signIn();
+    expect(await screen.findByRole("heading", { name: "Train" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start camera" })).toBeInTheDocument();
+    const nav = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(nav.slice(0, 4)).toEqual(["Train", "Dashboard", "Workouts", "Mirrors"]);
+  });
+
+  it("shows stats and recent workouts on the dashboard", async () => {
+    backend();
+    renderApp();
+    await signIn();
+    await userEvent.setup().click(await screen.findByRole("link", { name: "Dashboard" }));
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
     expect(await screen.findByText("roy@example.com")).toBeInTheDocument();
 
@@ -109,6 +120,7 @@ describe("the dashboard app", () => {
     backend([]);
     renderApp();
     await signIn();
+    await userEvent.setup().click(await screen.findByRole("link", { name: "Dashboard" }));
     expect(await screen.findByText("Connect your first mirror")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Add a mirror" })).toHaveAttribute("href", "/mirrors");
   });
@@ -124,7 +136,8 @@ describe("the dashboard app", () => {
     renderApp();
     await userEvent.setup().click(await screen.findByRole("button", { name: "Try the demo" }));
     expect(await screen.findByText(/looking at a demo/)).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Train" })).toBeInTheDocument();
+    expect(screen.getByText(/reps are counted but not saved/)).toBeInTheDocument();
   });
 
   it("stays signed in after a reload, using the stored refresh token", async () => {
@@ -136,7 +149,7 @@ describe("the dashboard app", () => {
         ? new Response(JSON.stringify(tokens(5)), { status: 200 })
         : routes(input, init),
     );
-    renderApp();
+    renderApp("/dashboard");
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
   });
 });

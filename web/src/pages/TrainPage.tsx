@@ -1,11 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { ExerciseTag, PageHeader, Spinner } from "../components/ui";
-import { formatDuration, formatNumber } from "../lib/format";
+import { EXERCISES, formatNumber } from "../lib/format";
 import { ARMS, SHOULDERS, SIDES, type Exercise } from "../train/config";
 import type { SetEntry } from "../train/counter";
 import type { Landmark } from "../train/geometry";
@@ -44,21 +44,26 @@ interface View {
   set: number;
   reps: number;
   resting: number | null; // seconds of rest, or null while training
+  flash: boolean; // a rep was just counted: the count lights up green, as on the mirror
   progress: [number, number]; // left and right arm: 0 = down, 1 = up
   history: SetEntry[];
   unsent: number;
   failedSends: number;
 }
 
+const FLASH_SECONDS = 0.35; // as long as the mirror's
+
 function snapshot(session: TrainingSession, seen: boolean, now: number): View {
   const workout = session.engine.workout;
   const [left, right] = workout.arms();
+  const resting = workout.resting(now);
   return {
     seen,
     exercise: workout.exercise,
     set: workout.set,
     reps: workout.exercise ? workout.setReps() : 0,
-    resting: workout.resting(now) ? workout.restTime(now) : null,
+    resting: resting ? workout.restTime(now) : null,
+    flash: !resting && workout.lastRep !== null && now - workout.lastRep < FLASH_SECONDS,
     progress: [left.progress(), right.progress()],
     history: workout.history.map((entry) => ({ ...entry })),
     unsent: session.unsent,
@@ -157,11 +162,115 @@ function SetList({ history }: { history: SetEntry[] }) {
   );
 }
 
-function status(view: View): string {
+/** A hint while there's nothing to count yet */
+function status(view: View): string | null {
   if (!view.seen) return "Step into view: head to waist, both arms";
-  if (view.resting !== null) return `Resting ${formatDuration(view.resting)}`;
   if (!view.exercise) return "Ready: start your first rep";
-  return `Set ${view.set}`;
+  return null;
+}
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** Seconds as the mirror shows them: 0:42, 2:05 */
+export function restClock(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(whole / 60)}:${pad(whole % 60)}`;
+}
+
+/** The mirror's display on top of the camera: the time and date, the
+ * exercise, and the rep count, or after 8 seconds without a rep, the rest timer */
+function MirrorHud({ view }: { view: View }) {
+  const now = new Date();
+  return (
+    <div className="mirror-text pointer-events-none absolute inset-0">
+      <div className="absolute left-[3cqw] top-[4cqh]">
+        <div className="mirror-clock">
+          {pad(now.getHours())}:{pad(now.getMinutes())}
+        </div>
+        <div className="mirror-small mt-1">
+          {pad(now.getDate())}/{pad(now.getMonth() + 1)}/{now.getFullYear()}
+        </div>
+      </div>
+      <div className="mirror-label absolute right-[3cqw] top-[4cqh] font-semibold tracking-normal text-[color:var(--mirror-cyan)]">
+        EasyWeight
+      </div>
+      {view.exercise && (
+        <div className="mirror-label absolute left-1/2 top-[7cqh] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap tracking-normal">
+          {EXERCISES[view.exercise].name}
+        </div>
+      )}
+      <div className="absolute left-1/2 top-[24%] -translate-x-1/2 -translate-y-1/2">
+        {view.resting !== null ? (
+          <span className="mirror-big text-[color:var(--mirror-cyan)]" aria-label="Rest time" role="timer">
+            {restClock(view.resting)}
+          </span>
+        ) : (
+          <span
+            className={`mirror-big ${view.flash ? "text-[color:var(--mirror-green)]" : ""}`}
+            aria-label="Reps"
+          >
+            {view.reps}
+          </span>
+        )}
+      </div>
+      <div className="mirror-label absolute left-1/2 top-[41%] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap">
+        {view.resting !== null ? `REST · SET ${view.set} DONE` : `SET ${view.set}`}
+      </div>
+    </div>
+  );
+}
+
+/** Full screen for the camera view. Where a page can't go full screen
+ * (Safari on iPhone), the view fills the window instead */
+function useFullscreen(ref: RefObject<HTMLElement | null>) {
+  const [full, setFull] = useState(false);
+  const native = useRef(false);
+
+  useEffect(() => {
+    const sync = () => {
+      if (native.current && !document.fullscreenElement) {
+        native.current = false; // left with Esc or the browser's own button
+        setFull(false);
+      }
+    };
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+
+  // Filling the window: Esc leaves, and the page behind doesn't scroll
+  useEffect(() => {
+    if (!full || native.current) return;
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setFull(false);
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [full]);
+
+  const exit = useCallback(() => {
+    if (native.current && document.fullscreenElement) void document.exitFullscreen();
+    native.current = false;
+    setFull(false);
+  }, []);
+
+  const enter = async () => {
+    const element = ref.current;
+    if (element?.requestFullscreen && document.fullscreenEnabled) {
+      try {
+        native.current = true;
+        await element.requestFullscreen();
+        setFull(true);
+        return;
+      } catch {
+        native.current = false;
+      }
+    }
+    setFull(true);
+  };
+
+  return { full, toggle: () => (full ? exit() : void enter()), exit };
 }
 
 type Phase =
@@ -179,6 +288,8 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
   const [view, setView] = useState<View | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stageRef = useRef<HTMLElement>(null);
+  const fullscreen = useFullscreen(stageRef);
   const live = useRef<{
     stream: MediaStream;
     detector: PoseDetector;
@@ -264,6 +375,7 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
   const stop = async () => {
     const session = stopCamera();
     if (!session) return;
+    fullscreen.exit();
     const history = session.engine.workout.history.map((entry) => ({ ...entry }));
     setPhase({ name: "done", history, saved: saving ? null : false });
     await session.finish(performance.now() / 1000);
@@ -330,48 +442,68 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
       )}
 
       {phase.name === "running" && view && (
-        <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
-          <div className="relative overflow-hidden rounded-xl bg-black">
+        <div className="space-y-4">
+          <section
+            ref={stageRef}
+            aria-label="Camera view"
+            className={`mirror relative overflow-hidden bg-black ${
+              fullscreen.full
+                ? "fixed inset-0 z-50 h-[100dvh] w-full"
+                : "h-[70svh] w-full rounded-xl sm:aspect-video sm:h-auto sm:max-h-[78svh]"
+            }`}
+          >
             {/* Mirrored, like a mirror. The landmarks are drawn on the same flip */}
-            <div className="-scale-x-100">
+            <div className="absolute inset-0 -scale-x-100">
               <video
                 ref={videoRef}
-                className="block w-full"
+                className="absolute inset-0 h-full w-full object-contain"
                 playsInline
                 muted
                 aria-label="Camera"
               />
-              <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-hidden />
+              <canvas
+                ref={canvasRef}
+                className="absolute inset-0 h-full w-full object-contain"
+                aria-hidden
+              />
             </div>
-            <div className="absolute left-3 top-3 rounded-lg bg-black/60 px-3 py-1.5 text-sm font-medium text-white">
-              {status(view)}
+            {/* A shade at the top, so the text reads in a bright room */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-black/60 to-transparent" />
+            <MirrorHud view={view} />
+            {status(view) && (
+              <div className="absolute bottom-3 left-3 max-w-[calc(100%-15rem)] rounded-lg bg-black/60 px-3 py-1.5 text-sm font-medium text-white">
+                {status(view)}
+              </div>
+            )}
+            <div className="absolute bottom-3 right-3 flex gap-2">
+              <button
+                type="button"
+                className="btn bg-black/60 text-white hover:bg-black/75"
+                onClick={fullscreen.toggle}
+              >
+                {fullscreen.full ? "Exit full screen" : "Full screen"}
+              </button>
+              <button type="button" className="btn-primary" onClick={() => void stop()}>
+                Stop
+              </button>
             </div>
-          </div>
+          </section>
 
-          <section className="card flex flex-col p-5" aria-label="Current set">
-            <div className="text-sm text-muted">
-              {view.exercise ? <ExerciseTag exercise={view.exercise} /> : "Waiting for a rep"}
-            </div>
-            <div className="mt-1 flex items-baseline gap-2">
-              <span className="text-6xl font-semibold tabular-nums" aria-label="Reps">
-                {view.reps}
-              </span>
-              <span className="text-muted">{view.reps === 1 ? "rep" : "reps"}</span>
-            </div>
-            <div className="mt-4 space-y-2">
+          <section className="card grid gap-6 p-5 md:grid-cols-[16rem_1fr]" aria-label="This session">
+            <div className="space-y-2">
+              <h2 className="mb-3 text-sm font-semibold">Arms</h2>
               <ArmMeter label="Left" value={view.progress[0]} />
               <ArmMeter label="Right" value={view.progress[1]} />
             </div>
-            <h2 className="mt-6 text-sm font-semibold">This session</h2>
-            <SetList history={view.history} />
-            {saving && view.failedSends > 0 && (
-              <p className="mt-3 text-xs text-danger">
-                Can't reach the server. {view.unsent} updates will be sent when it's back.
-              </p>
-            )}
-            <button type="button" className="btn-primary mt-6 self-start lg:mt-auto" onClick={() => void stop()}>
-              Stop
-            </button>
+            <div>
+              <h2 className="text-sm font-semibold">This session</h2>
+              <SetList history={view.history} />
+              {saving && view.failedSends > 0 && (
+                <p className="mt-3 text-xs text-danger">
+                  Can't reach the server. {view.unsent} updates will be sent when it's back.
+                </p>
+              )}
+            </div>
           </section>
         </div>
       )}

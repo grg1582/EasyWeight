@@ -50,7 +50,9 @@ test("sign up, add a mirror, and see its workout", async ({ page, request }) => 
   await page.getByLabel("Password").fill("a good long password");
   await page.getByRole("button", { name: "Create account" }).click();
 
-  // A new account has no mirrors yet
+  // You start on the Train page. A new account has no mirrors yet
+  await expect(page.getByRole("heading", { name: "Train" })).toBeVisible();
+  await page.getByRole("link", { name: "Dashboard" }).click();
   await expect(page.getByText("Connect your first mirror")).toBeVisible();
   await page.getByRole("link", { name: "Add a mirror" }).click();
 
@@ -109,6 +111,9 @@ test("the demo shows a full dashboard and can't be changed", async ({ page }) =>
   // The first visit on a fresh database simulates two months of workouts,
   // and the other browser waits its turn, so this can take a while on CI
   await expect(page.getByText("You're looking at a demo")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Train" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Dashboard" }).click();
   await expect(page.getByRole("heading", { name: "Reps per day" })).toBeVisible();
   await expect(page.getByRole("list", { name: "Reps by exercise" })).toContainText("Lateral raise");
 

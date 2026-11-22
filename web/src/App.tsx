@@ -51,10 +51,12 @@ export function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<DashboardPage />} />
+        {/* Train is the first page you see after signing in */}
+        <Route index element={<Navigate to="/train" replace />} />
+        <Route path="train" element={<TrainPage />} />
+        <Route path="dashboard" element={<DashboardPage />} />
         <Route path="workouts" element={<WorkoutsPage />} />
         <Route path="workouts/:id" element={<WorkoutPage />} />
-        <Route path="train" element={<TrainPage />} />
         <Route path="mirrors" element={<MirrorsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -3,9 +3,9 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 const links = [
-  { to: "/", label: "Dashboard", end: true },
-  { to: "/workouts", label: "Workouts", end: false },
   { to: "/train", label: "Train", end: false },
+  { to: "/dashboard", label: "Dashboard", end: false },
+  { to: "/workouts", label: "Workouts", end: false },
   { to: "/mirrors", label: "Mirrors", end: false },
 ];
 
