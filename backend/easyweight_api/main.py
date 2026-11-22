@@ -3,7 +3,7 @@ import logging
 from fastapi import FastAPI
 
 from .config import get_settings
-from .routers import auth, devices, events, health, stats, users, workouts
+from .routers import auth, devices, events, health, live, pairing, stats, users, workouts
 
 
 class _SkipHealthChecks(logging.Filter):
@@ -35,7 +35,7 @@ def create_app() -> FastAPI:
                     "Two kinds of sign-in: **User** (email and password, for the "
                     "dashboard) and **Device** (a mirror's token, for sending events).",
     )
-    for module in (health, auth, users, devices, events, workouts, stats):
+    for module in (health, auth, users, devices, pairing, events, workouts, stats, live):
         app.include_router(module.router)
     return app
 

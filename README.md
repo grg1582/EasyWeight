@@ -2,7 +2,7 @@
 
 # EasyWeight
 
-**A smart gym mirror that counts your reps.** A webcam and a pose model watch you train, recognize the exercise, count every rep and time your rest, and the numbers float on the glass. Every set is synced to the cloud, and a web app shows your training over time or turns any laptop or phone into the mirror.
+**A smart gym mirror that counts your reps.** A webcam and a pose model watch you train, recognize the exercise, count every rep, coach your form and time your rest, and the numbers float on the glass. Every rep reaches the cloud as it happens, and a web app shows your training live or turns any laptop or phone into the mirror.
 
 [![Live demo](https://img.shields.io/badge/live_demo-easyweight.onrender.com-2a78d6)](https://easyweight.onrender.com)
 [![Mirror app](https://github.com/grg1582/EasyWeight/actions/workflows/device.yml/badge.svg)](https://github.com/grg1582/EasyWeight/actions/workflows/device.yml)
@@ -30,10 +30,12 @@ Open **[easyweight.onrender.com](https://easyweight.onrender.com)** and press **
 ## Highlights
 
 - **Computer vision that knows what you're doing.** MediaPipe pose landmarks become joint angles, and a state machine per arm counts reps of three exercises. The first rep of a set decides the exercise, 8 seconds of stillness starts a rest timer, and a sip of water during the rest isn't counted as a curl. [How the counting works](docs/how-counting-works.md)
+- **A coach, not just a counter.** A rep that stopped halfway gets "Curl all the way up", reps too fast to control the weight get "Slow down", right under the count. In the rest after each set it sums the set up ("10 reps · 2 partial") and says what to do on the next one, or gives a form tip for the exercise after a clean set.
+- **Live, and set up with a QR code.** Every rep reaches your open dashboards within a second over a WebSocket. A new mirror shows a QR code: scan it with your phone and it's connected, with no password typed on the mirror and its token never leaving it.
 - **One counting logic, two languages.** The mirror runs it in Python, the browser in TypeScript. A cross language parity suite plays the same synthetic sessions through both and requires the exact same reps, sets and events.
 - **Works offline, never double counts.** The mirror writes every event to a local SQLite outbox and sends it when the network is back. Each event carries its own id, so retries are harmless, and each gets its own result, so one bad event never blocks a backlog.
 - **Security done properly.** Argon2 password hashes, short-lived JWTs with rotating refresh tokens that detect reuse, hashed device tokens, rate limited sign-in, and other users' data that answers "not found", not "forbidden".
-- **Tested and shipped.** 170+ automated tests: pytest against a real PostgreSQL, Vitest component tests, and Playwright end-to-end tests that sign up, add a mirror and train with a fake camera in a real browser. GitHub Actions runs all of them on every push, and Render deploys `main` from a single Blueprint.
+- **Tested and shipped.** 200+ automated tests: pytest against a real PostgreSQL, Vitest component tests, and Playwright end-to-end tests that sign up, add a mirror and train with a fake camera in a real browser. GitHub Actions runs all of them on every push, and Render deploys `main` from a single Blueprint.
 
 ## How it fits together
 
@@ -49,6 +51,7 @@ flowchart LR
   outbox -- "events, retried until sent" --> api["FastAPI"]
   count2 -- events --> api
   dash -- "REST + JWT" --> api
+  api -- "live updates (WebSocket)" --> dash
   api --> db[("PostgreSQL")]
 ```
 
@@ -70,23 +73,26 @@ docker compose up --build
 
 Then open http://localhost:8080 for the web app, or http://localhost:8000/docs to try every API endpoint.
 
-The mirror app runs on any computer with a webcam:
+The mirror app runs on any computer with a webcam. Connect it to your account by scanning a QR code, then train:
 
 ```bash
 cd device
 pip install -e .
+python -m easyweight.pair --name "Home mirror"
 python -m easyweight
 ```
+
+Contributing? See [CONTRIBUTING.md](CONTRIBUTING.md) for the architecture, the project structure and how to run every test.
 
 ## Documentation
 
 | | |
 |---|---|
-| [How the counting works](docs/how-counting-works.md) | The angles, the set and rest logic, telling drinking from curling, and the tuning constants |
-| [The mirror app](docs/mirror-app.md) | Setup, options, recording and replaying sessions, connecting the mirror to your account |
-| [Backend and API](docs/backend.md) | Every endpoint, how events and sign-in work, and deploying to Render and Neon |
-| [Web app](docs/web.md) | The dashboard and training in the browser |
-| [Development](docs/development.md) | Running the tests of each part, and the project structure |
+| [How the counting works](docs/how-counting-works.md) | The angles, the set and rest logic, telling drinking from curling, the coach, and the tuning constants |
+| [The mirror app](docs/mirror-app.md) | Setup, options, recording and replaying sessions, connecting the mirror by QR code |
+| [Backend and API](docs/backend.md) | Every endpoint, how events, sign-in, live updates and QR pairing work, and deploying |
+| [Web app](docs/web.md) | The dashboard, live updates, and training in the browser |
+| [Contributing](CONTRIBUTING.md) | The architecture, the project structure, setting up and running every test |
 
 ## Hardware
 

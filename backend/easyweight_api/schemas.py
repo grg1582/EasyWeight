@@ -58,6 +58,30 @@ class DeviceCreated(DeviceOut):
     token: str = Field(description="Shown only once. The device sends it as a Bearer token")
 
 
+# Connecting a mirror by QR code
+
+
+class PairingCreate(BaseModel):
+    token_hash: str = Field(pattern=r"^[0-9a-f]{64}$",
+                            description="SHA-256 (hex) of a random token the mirror made")
+    name: str | None = Field(default=None, max_length=100, examples=["Home mirror"])
+
+
+class PairingCreated(BaseModel):
+    code: str = Field(examples=["K7QM3XPA"])
+    expires_at: datetime
+
+
+class PairingClaim(BaseModel):
+    name: str | None = Field(default=None, max_length=100)
+
+
+class PairingStatus(BaseModel):
+    status: Literal["waiting", "paired"]
+    device: DeviceOut | None = None
+    expires_at: datetime
+
+
 # Events a device sends. Every event has an id chosen by the device (so sending
 # it twice is harmless), the time it happened, and data depending on its type
 

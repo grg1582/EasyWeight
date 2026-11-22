@@ -28,6 +28,13 @@ export interface DeviceCreated extends Device {
   token: string;
 }
 
+/** A mirror connected by scanning its QR code */
+export interface PairingStatus {
+  status: "waiting" | "paired";
+  device: Device | null;
+  expires_at: string;
+}
+
 export interface WorkoutSummary {
   id: string;
   device_id: string;

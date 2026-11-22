@@ -76,6 +76,8 @@ describe("TrainPage", () => {
     const stage = screen.getByRole("region", { name: "Camera view" });
     expect(within(stage).getByText("Bicep curl")).toBeInTheDocument();
     expect(within(stage).getByText("SET 1")).toBeInTheDocument();
+    // The fake camera plays the 10 curls far faster than anyone could lift
+    expect(within(stage).getByRole("status")).toHaveTextContent("Slow down: control the weight");
     const session = screen.getByRole("region", { name: "This session" });
     expect(within(session).getByRole("list", { name: "Sets" })).toHaveTextContent("Set 1Bicep curl10 reps");
 
@@ -125,6 +127,10 @@ describe("TrainPage", () => {
     const timer = await screen.findByRole("timer", { name: "Rest time" });
     expect(timer.textContent).toMatch(/^1:0[5-6]$/);
     expect(screen.getByText("REST · SET 1 DONE")).toBeInTheDocument();
+    // How the set went, and what to do on the next one. The fake camera's reps are fast
+    const summary = screen.getByRole("status", { name: "How the set went" });
+    expect(summary).toHaveTextContent(/10 reps · \d+ too fast/);
+    expect(summary).toHaveTextContent("Next set: 2 seconds up, 2 seconds down");
     expect(screen.queryByLabelText("Reps")).not.toBeInTheDocument();
   });
 

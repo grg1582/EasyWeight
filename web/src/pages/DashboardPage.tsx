@@ -5,6 +5,7 @@ import { useDevices, useStats, useWorkouts } from "../api/queries";
 import { DailyRepsChart, ExerciseBars } from "../components/charts";
 import { EmptyState, ErrorNote, PageHeader, Spinner, StatTile } from "../components/ui";
 import { WorkoutList } from "../components/WorkoutList";
+import { TrainingNow } from "../live/LiveViews";
 import { EXERCISE_ORDER, fillDays, formatNumber } from "../lib/format";
 
 const RANGES = [7, 30, 90] as const;
@@ -72,6 +73,7 @@ export function DashboardPage() {
   return (
     <>
       {header}
+      <TrainingNow />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile label="Workouts" value={formatNumber(s.workouts)} />
         <StatTile label="Reps" value={formatNumber(totalReps)} />

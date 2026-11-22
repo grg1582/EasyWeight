@@ -127,11 +127,16 @@ def revoke_refresh_token(db: Session, token: str) -> None:
     db.commit()
 
 
+def access_claims(token: str) -> dict:
+    """The claims of a valid access token ("sub" is the user's id). Raises 401"""
+    return _decode(token, "access")
+
+
 def current_user(token: str | None = Depends(user_bearer), db: Session = Depends(get_db)) -> User:
     """FastAPI dependency: the signed-in user"""
     if not token:
         raise _unauthorized("Not signed in")
-    claims = _decode(token, "access")
+    claims = access_claims(token)
     user = db.get(User, uuid.UUID(claims["sub"]))
     if user is None:
         raise _unauthorized("User no longer exists")

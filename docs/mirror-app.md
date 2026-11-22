@@ -35,10 +35,24 @@ the rep counter without a camera:
 python -m easyweight.replay set.jsonl.gz
 ```
 
-### Saving workouts to the backend
+### Saving workouts to your account
 
-Create an account in the [dashboard](https://easyweight.onrender.com), then register the
-mirror to it once (the backend must be running). It asks for your password:
+The easy way: connect the mirror by scanning a QR code with your phone, no
+password typed on the mirror.
+
+```
+python -m easyweight.pair --name "Home mirror"
+```
+
+The mirror shows a big QR code. Scan it with your phone, sign in (or create an
+account), and press **Connect mirror**. The mirror notices within a few seconds
+and saves its token. `--terminal` prints the QR code in the terminal instead of
+opening a window. For a backend on your own computer, pass `--api-url` and
+`--site` with the computer's address on your network (not localhost), so the
+phone can open the link.
+
+Or sign in on the mirror itself, once (the backend must be running). It asks
+for your password:
 
 ```
 python -m easyweight.register --name "Home mirror" --email you@example.com

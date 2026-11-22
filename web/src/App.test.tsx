@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import { App } from "./App";
 import { clearTokens } from "./api/client";
 import { AuthProvider } from "./auth/AuthContext";
 import { fakeApi, signedIn, tokens } from "./test/fakeApi";
+import { FakeWebSocket } from "./test/fakeSocket";
 
 afterEach(() => {
   clearTokens();
@@ -114,6 +115,67 @@ describe("the dashboard app", () => {
     const row = screen.getByRole("link", { name: /\w{3}, \w{3} \d+/ }).closest("tr")!;
     expect(within(row).getByText("24")).toBeInTheDocument();
     expect(row).toHaveTextContent("10 min");
+  });
+
+  it("shows a mirror's set as it happens, and refreshes the workouts", async () => {
+    const api = backend();
+    renderApp();
+    await signIn();
+    await userEvent.setup().click(await screen.findByRole("link", { name: "Dashboard" }));
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Training now" })).not.toBeInTheDocument();
+
+    const socket = await waitFor(() => FakeWebSocket.last!);
+    act(() => {
+      socket.open();
+      socket.receive({ type: "ready" });
+    });
+    expect(await screen.findByText("Live")).toBeInTheDocument();
+    const workoutsBefore = api.calls.filter((c) => c.path === "/workouts").length;
+
+    const at = new Date().toISOString();
+    act(() =>
+      socket.receive({
+        type: "events",
+        device: { id: "d1", name: "Home mirror", kind: "mirror" },
+        events: [
+          { id: "e1", type: "set_started", at, data: { workout_id: "w2", set_id: "s", exercise: "press", set_number: 3 } },
+          { id: "e2", type: "rep", at, data: { set_id: "s", side: "left", count: 1, top: 1.2 } },
+          { id: "e3", type: "rep", at, data: { set_id: "s", side: "left", count: 2, top: 1.1 } },
+        ],
+      }),
+    );
+    const now = await screen.findByRole("region", { name: "Training now" });
+    expect(now).toHaveTextContent("Home mirror");
+    expect(now).toHaveTextContent("Overhead press");
+    expect(now).toHaveTextContent("Set 3 · 2 reps");
+    await waitFor(() =>
+      expect(api.calls.filter((c) => c.path === "/workouts").length).toBeGreaterThan(workoutsBefore),
+    );
+  });
+
+  it("connects a mirror from its QR code link, signing in on the way", async () => {
+    const api = backend();
+    const routes = api.fetchMock.getMockImplementation()!;
+    api.fetchMock.mockImplementation(async (input, init) =>
+      String(input).endsWith("/pairing/K7QM3XPA/claim")
+        ? new Response(
+            JSON.stringify({
+              status: "paired",
+              expires_at: today,
+              device: { id: "d2", name: JSON.parse(String(init!.body)).name, kind: "mirror", created_at: today, last_seen_at: null },
+            }),
+            { status: 201 },
+          )
+        : routes(input, init),
+    );
+    renderApp("/pair/k7qm3xpa");
+    const user = await signIn();
+    const form = await screen.findByRole("region", { name: "Connect a mirror" });
+    expect(form).toHaveTextContent("K7QM-3XPA");
+    await user.type(within(form).getByLabelText("Name (optional)"), "Hallway");
+    await user.click(within(form).getByRole("button", { name: "Connect mirror" }));
+    expect(await screen.findByText("“Hallway” is connected")).toBeInTheDocument();
   });
 
   it("points a new user to adding a mirror", async () => {

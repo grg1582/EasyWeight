@@ -41,6 +41,10 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "24"
+      # Live updates connect to the API directly: the rewrite below doesn't
+      # carry WebSockets
+      - key: VITE_LIVE_URL
+        value: wss://easyweight-api.onrender.com/api/v1/live
     routes:
       - type: rewrite
         source: /api/*

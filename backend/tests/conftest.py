@@ -64,10 +64,12 @@ def db(engine):
 @pytest.fixture(autouse=True)
 def fresh_rate_limits():
     """Each test starts with no sign-in attempts counted"""
-    from easyweight_api.routers import auth
+    from easyweight_api.routers import auth, pairing
 
     auth.login_limit.clear()
     auth.signup_limit.clear()
+    pairing.create_limit.clear()
+    pairing.claim_limit.clear()
 
 
 @pytest.fixture

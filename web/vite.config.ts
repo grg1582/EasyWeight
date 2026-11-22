@@ -15,11 +15,11 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    proxy: { "/api": apiUrl },
+    proxy: { "/api": { target: apiUrl, ws: true } }, // ws: the live updates too
   },
   preview: {
     port: 4173,
-    proxy: { "/api": apiUrl },
+    proxy: { "/api": { target: apiUrl, ws: true } },
   },
   test: {
     environment: "jsdom",

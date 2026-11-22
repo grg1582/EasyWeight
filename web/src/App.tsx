@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { useAuth } from "./auth/AuthContext";
 import { Layout, Logo } from "./components/Layout";
@@ -6,6 +6,7 @@ import { EmptyState, Spinner } from "./components/ui";
 import { LoginPage, RegisterPage } from "./pages/AuthPages";
 import { DashboardPage } from "./pages/DashboardPage";
 import { MirrorsPage } from "./pages/MirrorsPage";
+import { PairPage } from "./pages/PairPage";
 import { TrainPage } from "./pages/TrainPage";
 import { WorkoutPage } from "./pages/WorkoutPage";
 import { WorkoutsPage } from "./pages/WorkoutsPage";
@@ -26,6 +27,19 @@ function Offline({ onRetry }: { onRetry: () => void }) {
   );
 }
 
+/** Signed out on a page (say, a mirror's QR code link): sign in first, then
+ * come back to it */
+function ToSignIn() {
+  const { pathname } = useLocation();
+  return <Navigate to="/login" state={{ from: pathname }} replace />;
+}
+
+/** Just signed in (still on /login or /register): back to where you were going */
+function AfterSignIn() {
+  const from = (useLocation().state as { from?: string } | null)?.from;
+  return <Navigate to={from?.startsWith("/") ? from : "/"} replace />;
+}
+
 export function App() {
   const { status, retry } = useAuth();
 
@@ -43,7 +57,7 @@ export function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<ToSignIn />} />
       </Routes>
     );
   }
@@ -58,8 +72,9 @@ export function App() {
         <Route path="workouts" element={<WorkoutsPage />} />
         <Route path="workouts/:id" element={<WorkoutPage />} />
         <Route path="mirrors" element={<MirrorsPage />} />
+        <Route path="pair/:code" element={<PairPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<AfterSignIn />} />
     </Routes>
   );
 }
