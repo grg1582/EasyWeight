@@ -58,6 +58,8 @@ def test_the_code_is_easy_to_read():
 
 
 def test_the_qr_code_has_a_quiet_zone():
+    pytest.importorskip("numpy")  # only drawing the code needs these two
+    pytest.importorskip("segno")
     image = qr_image("https://easyweight.onrender.com/pair/K7QM3XPA", 300)
     assert image.shape[0] == image.shape[1] <= 300
     assert image[0].min() == 255 and image[:, 0].min() == 255  # white border
