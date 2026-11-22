@@ -6,10 +6,9 @@ import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { ExerciseTag, PageHeader, Spinner } from "../components/ui";
 import { EXERCISES, formatNumber } from "../lib/format";
-import { ARMS, SHOULDERS, SIDES, type Exercise } from "../train/config";
+import type { Exercise } from "../train/config";
 import type { Summary } from "../train/coach";
 import type { SetEntry } from "../train/counter";
-import type { Landmark } from "../train/geometry";
 import { loadPoseDetector, type PoseDetector } from "../train/pose";
 import type { WorkoutEvent } from "../train/reporter";
 import { TrainingSession } from "../train/session";
@@ -87,44 +86,6 @@ function cameraError(error: unknown): string {
     }
   }
   return error instanceof Error ? error.message : "Couldn't start the camera.";
-}
-
-/** The arms (what the counting looks at) on top of the video */
-function drawArms(canvas: HTMLCanvasElement, landmarks: Landmark[] | null, width: number, height: number) {
-  if (canvas.width !== width) canvas.width = width;
-  if (canvas.height !== height) canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  ctx.clearRect(0, 0, width, height);
-  if (!landmarks) return;
-  const at = (i: number) => {
-    const point = landmarks[i]!;
-    return [point.x * width, point.y * height] as const;
-  };
-  const scale = Math.max(2, width / 320);
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  const line = (ids: number[]) => {
-    ctx.beginPath();
-    ids.forEach((i, k) => (k ? ctx.lineTo(...at(i)) : ctx.moveTo(...at(i))));
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.45)";
-    ctx.lineWidth = scale * 2.6;
-    ctx.stroke();
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = scale * 1.4;
-    ctx.stroke();
-  };
-  line([...SHOULDERS]);
-  for (const side of SIDES) line(ARMS[side]);
-  for (const i of [...ARMS.left, ...ARMS.right]) {
-    ctx.beginPath();
-    ctx.arc(...at(i), scale * 3, 0, Math.PI * 2);
-    ctx.fillStyle = "#2a78d6";
-    ctx.fill();
-    ctx.lineWidth = scale;
-    ctx.strokeStyle = "#ffffff";
-    ctx.stroke();
-  }
 }
 
 function ArmMeter({ label, value }: { label: string; value: number }) {
@@ -314,7 +275,6 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
   const [phase, setPhase] = useState<Phase>({ name: "intro" });
   const [view, setView] = useState<View | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLElement>(null);
   const fullscreen = useFullscreen(stageRef);
   const live = useRef<{
@@ -361,7 +321,6 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
   useEffect(() => {
     if (phase.name !== "running" || !live.current) return;
     const video = videoRef.current!;
-    const canvas = canvasRef.current!;
     const { stream } = live.current;
     video.srcObject = stream;
     const playing = video.play?.() as Promise<void> | undefined; // undefined in old browsers
@@ -380,7 +339,6 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
         const width = video.videoWidth;
         const height = video.videoHeight;
         const counted = current.session.step(landmarks, width, height, nowMs / 1000);
-        drawArms(canvas, landmarks, width, height);
         if (counted || nowMs - lastView > 100) {
           lastView = nowMs;
           setView(snapshot(current.session, landmarks !== null, nowMs / 1000));
@@ -479,7 +437,7 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
                 : "relative h-[70svh] w-full rounded-xl sm:aspect-video sm:h-auto sm:max-h-[78svh]"
             }`}
           >
-            {/* Mirrored, like a mirror. The landmarks are drawn on the same flip */}
+            {/* Mirrored, like a mirror */}
             <div className="absolute inset-0 -scale-x-100">
               <video
                 ref={videoRef}
@@ -487,11 +445,6 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
                 playsInline
                 muted
                 aria-label="Camera"
-              />
-              <canvas
-                ref={canvasRef}
-                className="absolute inset-0 h-full w-full object-contain"
-                aria-hidden
               />
             </div>
             {/* A shade at the top, so the text reads in a bright room */}
