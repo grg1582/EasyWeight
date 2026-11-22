@@ -6,6 +6,7 @@
 // they stay queued and go with the next one. Sending an event twice is
 // harmless: the backend answers "duplicate".
 
+import { Coach } from "./coach";
 import { Engine } from "./engine";
 import type { Landmark } from "./geometry";
 import { Reporter, type WorkoutEvent } from "./reporter";
@@ -17,6 +18,8 @@ const MAX_BATCH = 500; // the backend's limit per request
 
 export class TrainingSession {
   readonly engine = new Engine();
+  /** Feedback on how the reps are done */
+  readonly coach = new Coach();
   readonly reporter: Reporter;
   /** Every event so far, sent or not (the summary shows what was done) */
   readonly events: WorkoutEvent[] = [];
@@ -36,6 +39,7 @@ export class TrainingSession {
   /** One video frame. now is in seconds. Returns true when it counted a rep */
   step(landmarks: Landmark[] | null, width: number, height: number, now: number): boolean {
     const counted = this.engine.step(landmarks, width, height, now);
+    this.coach.observe(this.engine.workout, now);
     this.add(this.reporter.observe(this.engine.workout, now));
     if (now - this.lastSend >= SEND_EVERY_SECONDS) {
       this.lastSend = now;

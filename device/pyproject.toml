@@ -14,6 +14,7 @@ dependencies = [
     "opencv-python",
     "pillow",
     "certifi",
+    "segno",  # QR codes, for connecting the mirror to an account
 ]
 
 [project.optional-dependencies]

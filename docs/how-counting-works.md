@@ -40,6 +40,20 @@ real curl stops near the shoulder, so when the arm straightens it starts the
 next set. Raises and presses can't be drinking, so they start the next set
 right away.
 
+## Feedback on the reps
+
+A coach watches the counting (without changing it) and shows a short cue under
+the count for a few seconds:
+
+| Cue | When |
+|-----|------|
+| *Curl all the way up* (or *Raise to shoulder height*, *Press all the way up*) | An arm got at least halfway through a rep, then went back down without finishing it |
+| *Slow down: control the weight* | Two reps of the same arm less than 0.9 seconds apart |
+
+Each set starts with a clean slate, and the coach stays quiet during the rest.
+The mirror (`device/easyweight/coach.py`) and the browser
+(`web/src/train/coach.ts`) have the same coach, tested with the same cases.
+
 ## Tuning
 
 If reps are missed or counted when they shouldn't be, adjust the constants in

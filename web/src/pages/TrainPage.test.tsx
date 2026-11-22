@@ -76,6 +76,8 @@ describe("TrainPage", () => {
     const stage = screen.getByRole("region", { name: "Camera view" });
     expect(within(stage).getByText("Bicep curl")).toBeInTheDocument();
     expect(within(stage).getByText("SET 1")).toBeInTheDocument();
+    // The fake camera plays the 10 curls far faster than anyone could lift
+    expect(within(stage).getByRole("status")).toHaveTextContent("Slow down: control the weight");
     const session = screen.getByRole("region", { name: "This session" });
     expect(within(session).getByRole("list", { name: "Sets" })).toHaveTextContent("Set 1Bicep curl10 reps");
 

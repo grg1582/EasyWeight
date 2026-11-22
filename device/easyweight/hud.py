@@ -23,6 +23,7 @@ WHITE = (255, 255, 255)
 GREEN = (90, 255, 120)
 CYAN = (255, 210, 60)
 LIGHT_GRAY = (200, 200, 200)
+AMBER = (69, 200, 255)  # feedback on the reps
 
 # Bold TrueType fonts, first one found wins. Thin strokes vanish behind the glass.
 # Inter Display (in the fonts folder, free under the SIL Open Font License) looks
@@ -75,7 +76,7 @@ def draw_texts(canvas, texts):
                     color, thickness, cv2.LINE_AA)
 
 
-def draw_hud(canvas, texts, workout, now, flash):
+def draw_hud(canvas, texts, workout, now, flash, cue=None):
     """Draw the mirror display. Everything scales with the window size
 
     Only the time and date (top left) and the exercise and the count (or the
@@ -106,6 +107,8 @@ def draw_hud(canvas, texts, workout, now, flash):
         add_text(texts, str(reps), cx, H * 0.24, 190 * s, GREEN if flash else WHITE)
         add_text(texts, f"SET {workout.set}", cx, H * 0.24 + 120 * s,
                  30 * s, LIGHT_GRAY)
+        if cue:  # from the coach, like "Curl all the way up"
+            add_text(texts, cue, cx, H * 0.24 + 180 * s, 30 * s, AMBER)
 
 
 def draw_camera(canvas, frame):
@@ -119,14 +122,15 @@ def draw_camera(canvas, frame):
     canvas[y0:y0 + dh, x0:x0 + dw] = cv2.convertScaleAbs(view, alpha=0.45)
 
 
-def render(size, workout, now, flash, frame=None):
+def render(size, workout, now, flash, frame=None, cue=None):
     """A full HUD image of size (width, height). frame is the camera picture to
-    show behind it, or None for a black background"""
+    show behind it, or None for a black background. cue is the coach's
+    feedback to show under the count, if any"""
     W, H = size
     canvas = np.zeros((H, W, 3), np.uint8)
     texts = []
     if frame is not None:
         draw_camera(canvas, frame)
-    draw_hud(canvas, texts, workout, now, flash)
+    draw_hud(canvas, texts, workout, now, flash, cue)
     draw_texts(canvas, texts)
     return canvas

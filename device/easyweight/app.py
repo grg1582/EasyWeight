@@ -25,6 +25,7 @@ import time
 import cv2
 import mediapipe as mp
 
+from .coach import Coach
 from .engine import Engine
 from .hud import render
 from .pose import MODELS_DIR, create_landmarker, load_model
@@ -135,6 +136,7 @@ def main(argv=None):
                  "Is another app using it? You can also try --camera 1")
 
     engine = Engine()
+    coach = Coach()
     reporter, outbox, sender = start_sync(args)
     fullscreen, show_camera = args.fullscreen, True
     flash_until, failed_reads = 0.0, 0
@@ -181,11 +183,12 @@ def main(argv=None):
 
             if engine.step(landmarks, w, h, now):
                 flash_until = now + 0.35
+            coach.observe(engine.workout, now)
             if reporter:
                 outbox.add(reporter.observe(engine.workout, now))
 
             canvas = render(window_size(), engine.workout, now, flash=now < flash_until,
-                            frame=frame if show_camera else None)
+                            frame=frame if show_camera else None, cue=coach.text(now))
             cv2.imshow(WINDOW, canvas)
 
             action = key_action(cv2.waitKeyEx(1))

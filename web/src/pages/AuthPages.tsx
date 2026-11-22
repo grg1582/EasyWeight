@@ -1,12 +1,13 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 import { Logo } from "../components/Layout";
 
 function AuthForm({ mode }: { mode: "login" | "register" }) {
   const { signIn, signUp, tryDemo } = useAuth();
+  const { state } = useLocation(); // where to go after signing in, if somewhere
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +102,7 @@ function AuthForm({ mode }: { mode: "login" | "register" }) {
         </p>
         <p className="mt-6 text-center text-sm text-muted">
           {isLogin ? "No account yet? " : "Already have an account? "}
-          <Link to={isLogin ? "/register" : "/login"} className="font-medium text-accent">
+          <Link to={isLogin ? "/register" : "/login"} state={state} className="font-medium text-accent">
             {isLogin ? "Create one" : "Sign in"}
           </Link>
         </p>

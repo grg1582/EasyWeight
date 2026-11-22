@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 
 import type { DeviceCreated } from "../api/types";
 import { useAddDevice, useDevices, useRemoveDevice } from "../api/queries";
@@ -55,6 +56,45 @@ function NewMirror({ device, onDone }: { device: DeviceCreated; onDone: () => vo
         Done
       </button>
     </div>
+  );
+}
+
+/** The easy way: the mirror shows a QR code. Scanning it opens /pair/<code>;
+ * a laptop without a camera can type the code here instead */
+function PairWithCode() {
+  const navigate = useNavigate();
+  const [code, setCode] = useState("");
+  const clean = code.replace(/[\s-]/g, "");
+  return (
+    <form
+      className="card space-y-3 p-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        navigate(`/pair/${clean.toUpperCase()}`);
+      }}
+    >
+      <h2 className="font-semibold">Connect with a QR code</h2>
+      <p className="text-sm text-muted">
+        On the mirror, run <code className="rounded bg-ink/5 px-1">python -m easyweight.pair</code>{" "}
+        and scan the code it shows with your phone. Or type the code here:
+      </p>
+      <div className="flex gap-2">
+        <label htmlFor="pair-code" className="sr-only">
+          Code
+        </label>
+        <input
+          id="pair-code"
+          className="input font-mono uppercase tracking-widest"
+          placeholder="K7QM-3XPA"
+          maxLength={9}
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+        />
+        <button type="submit" className="btn-primary" disabled={clean.length !== 8}>
+          Next
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -165,8 +205,9 @@ export function MirrorsPage() {
                 Add mirror
               </button>
             </form>
+            <PairWithCode />
             <div className="card p-5 text-sm text-muted">
-              <h2 className="mb-2 font-semibold text-ink">Or from the mirror itself</h2>
+              <h2 className="mb-2 font-semibold text-ink">Or sign in on the mirror</h2>
               <p className="mb-3">Run this on the mirror, in the device folder:</p>
               <CopyBlock
                 label="Register command"

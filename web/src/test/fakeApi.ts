@@ -27,7 +27,7 @@ export function fakeApi(routes: Record<string, Handler>) {
 export const tokens = (n = 1) => ({
   access_token: `access-${n}`,
   refresh_token: `refresh-${n}`,
-  token_type: "bearer",
+  token_type: "bearer" as const,
 });
 
 export const signedIn = (init: { headers?: HeadersInit }) =>

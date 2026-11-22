@@ -97,6 +97,15 @@ function refreshTokens(): Promise<boolean> {
   return refreshing;
 }
 
+/** An access token for the live connection, refreshed when `renew` is true
+ * (the last one was turned away) or there is none yet. Null when signed out */
+export async function accessTokenFor(renew = false): Promise<string | null> {
+  if (renew || !accessToken) {
+    if (!(await refreshTokens())) return accessToken && !renew ? accessToken : null;
+  }
+  return accessToken;
+}
+
 interface RequestOptions {
   method?: string;
   json?: unknown;

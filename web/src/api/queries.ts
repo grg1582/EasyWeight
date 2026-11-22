@@ -5,7 +5,15 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "./client";
-import type { Device, DeviceCreated, Stats, User, WorkoutDetail, WorkoutPage } from "./types";
+import type {
+  Device,
+  DeviceCreated,
+  PairingStatus,
+  Stats,
+  User,
+  WorkoutDetail,
+  WorkoutPage,
+} from "./types";
 
 export const PAGE_SIZE = 20;
 
@@ -53,6 +61,19 @@ export function useAddDevice() {
   return useMutation({
     mutationFn: (name: string) =>
       api<DeviceCreated>("/devices", { method: "POST", json: { name } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["devices"] }),
+  });
+}
+
+/** Connect the mirror showing this code (from its QR code) to your account */
+export function useClaimPairing() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ code, name }: { code: string; name: string }) =>
+      api<PairingStatus>(`/pairing/${encodeURIComponent(code)}/claim`, {
+        method: "POST",
+        json: { name: name.trim() || null },
+      }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["devices"] }),
   });
 }

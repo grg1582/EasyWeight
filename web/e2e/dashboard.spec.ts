@@ -1,3 +1,5 @@
+import { createHash, randomBytes } from "node:crypto";
+
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext } from "@playwright/test";
 
@@ -124,4 +126,81 @@ test("the demo shows a full dashboard and can't be changed", async ({ page }) =>
   await expect(page.getByText("Demo mirror")).toBeVisible();
   await expect(page.getByRole("button", { name: "Remove" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "This is the demo" })).toBeVisible();
+});
+
+test("the dashboard shows a mirror's set as it happens, without a reload", async ({ page, request }) => {
+  await page.goto("/register");
+  await page.getByLabel("Email").fill(newEmail());
+  await page.getByLabel("Password").fill("a good long password");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByRole("link", { name: "Mirrors" }).click();
+  await page.getByLabel("Name").fill("Live mirror");
+  await page.getByRole("button", { name: "Add mirror" }).click();
+  const config = JSON.parse((await page.locator("pre[aria-label='Mirror settings']").textContent())!);
+
+  await page.getByRole("link", { name: "Dashboard" }).click();
+  await expect(page.getByText("Live", { exact: true })).toBeVisible();
+
+  // The mirror starts a set of lateral raises: 3 reps so far
+  const at = () => new Date().toISOString();
+  const workoutId = crypto.randomUUID();
+  const setId = crypto.randomUUID();
+  const events = [
+    { id: crypto.randomUUID(), type: "workout_started", at: at(), data: { workout_id: workoutId } },
+    {
+      id: crypto.randomUUID(),
+      type: "set_started",
+      at: at(),
+      data: { workout_id: workoutId, set_id: setId, exercise: "raise", set_number: 1 },
+    },
+    ...[1, 2, 3].map((count) => ({
+      id: crypto.randomUUID(),
+      type: "rep",
+      at: at(),
+      data: { set_id: setId, side: "left", count, top: 80 },
+    })),
+  ];
+  const response = await request.post("/api/v1/events", {
+    data: { events },
+    headers: { Authorization: `Bearer ${config.token}` },
+  });
+  expect(response.ok()).toBeTruthy();
+
+  const now = page.getByRole("region", { name: "Training now" });
+  await expect(now).toContainText("Live mirror");
+  await expect(now).toContainText("Lateral raise");
+  await expect(now).toContainText("Set 1 · 3 reps");
+  // The stats load again by themselves
+  await expect(page.locator(".card", { hasText: /^Reps/ }).first()).toContainText("3");
+});
+
+test("connect a mirror by scanning its QR code", async ({ page, request }) => {
+  // The mirror makes its own token and asks for a code, sending only the hash
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const started = await request.post("/api/v1/pairing", { data: { token_hash: tokenHash, name: "Hallway mirror" } });
+  expect(started.status()).toBe(201);
+  const { code } = await started.json();
+  const mirrorAsks = () => request.get(`/api/v1/pairing/${code}`, { headers: { Authorization: `Bearer ${token}` } });
+  expect((await (await mirrorAsks()).json()).status).toBe("waiting");
+
+  // The phone opens the QR code's link: sign up first, then straight back to it
+  await page.goto(`/pair/${code}`);
+  await page.getByRole("link", { name: "Create one" }).click();
+  await expect(page.getByRole("heading", { name: "Create an account" })).toBeVisible();
+  await page.getByLabel("Email").fill(newEmail());
+  await page.getByLabel("Password").fill("a good long password");
+  await page.getByRole("button", { name: "Create account" }).click();
+  const form = page.getByRole("region", { name: "Connect a mirror" });
+  await expect(form).toContainText(`${code.slice(0, 4)}-${code.slice(4)}`);
+  await form.getByRole("button", { name: "Connect mirror" }).click();
+  await expect(page.getByText("“Hallway mirror” is connected")).toBeVisible();
+
+  // The mirror hears it's connected, and its own token works
+  const answer = await (await mirrorAsks()).json();
+  expect(answer.status).toBe("paired");
+  const me = await request.get("/api/v1/devices/me", { headers: { Authorization: `Bearer ${token}` } });
+  expect((await me.json()).name).toBe("Hallway mirror");
+  await page.getByRole("link", { name: "Mirrors" }).click();
+  await expect(page.getByText("Hallway mirror")).toBeVisible();
 });

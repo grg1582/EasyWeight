@@ -45,6 +45,7 @@ interface View {
   reps: number;
   resting: number | null; // seconds of rest, or null while training
   flash: boolean; // a rep was just counted: the count lights up green, as on the mirror
+  cue: string | null; // feedback on the reps, like "Curl all the way up"
   progress: [number, number]; // left and right arm: 0 = down, 1 = up
   history: SetEntry[];
   unsent: number;
@@ -64,6 +65,7 @@ function snapshot(session: TrainingSession, seen: boolean, now: number): View {
     reps: workout.exercise ? workout.setReps() : 0,
     resting: resting ? workout.restTime(now) : null,
     flash: !resting && workout.lastRep !== null && now - workout.lastRep < FLASH_SECONDS,
+    cue: resting ? null : session.coach.text(now),
     progress: [left.progress(), right.progress()],
     history: workout.history.map((entry) => ({ ...entry })),
     unsent: session.unsent,
@@ -216,6 +218,14 @@ function MirrorHud({ view }: { view: View }) {
       <div className="mirror-label absolute left-1/2 top-[41%] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap">
         {view.resting !== null ? `REST · SET ${view.set} DONE` : `SET ${view.set}`}
       </div>
+      {view.cue && (
+        <div
+          role="status"
+          className="mirror-label absolute left-1/2 top-[50%] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-semibold tracking-normal text-[color:var(--mirror-amber)]"
+        >
+          {view.cue}
+        </div>
+      )}
     </div>
   );
 }

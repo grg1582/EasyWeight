@@ -4,7 +4,8 @@ A user owns devices (mirrors). A device sends events. Each event is stored as
 it arrived (events) and applied to the workout tables:
 
     users ─< devices ─< workouts ─< sets ─< reps
-      │         └─< events
+      │         ├─< events
+      │         └─< pairings (a QR code that connected it)
       └─< refresh_tokens
 """
 import enum
@@ -160,3 +161,20 @@ class Event(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     data: Mapped[dict] = mapped_column(JSONB)
+
+
+class Pairing(Base):
+    """A mirror asking to be connected by QR code. It made its own token and
+    sent only the hash. Claiming the code creates the device with that hash,
+    so the token itself never leaves the mirror"""
+
+    __tablename__ = "pairings"
+
+    code: Mapped[str] = mapped_column(String(8), primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    name: Mapped[str | None] = mapped_column(String(100))  # suggested by the mirror
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    device_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("devices.id", ondelete="CASCADE")
+    )

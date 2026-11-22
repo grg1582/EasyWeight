@@ -87,6 +87,7 @@ body {
     --mirror-cyan: #3cd2ff; /* the mirror's colors (hud.py) */
     --mirror-green: #78ff5a;
     --mirror-gray: #c8c8c8;
+    --mirror-amber: #ffc845; /* feedback on the reps */
   }
   .mirror-text {
     color: #fff;

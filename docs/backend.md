@@ -34,12 +34,16 @@ endpoint (the Authorize button signs in).
 | `POST /api/v1/devices` | user | Add a mirror. Returns its token, once |
 | `DELETE /api/v1/devices/{id}` | user | Remove a mirror and its workouts |
 | `GET /api/v1/devices/me` | mirror | The mirror a token belongs to |
+| `POST /api/v1/pairing` | anyone | A mirror asks for a QR code, sending its token's hash |
+| `GET /api/v1/pairing/{code}` | mirror | Has the code been claimed yet? |
+| `POST /api/v1/pairing/{code}/claim` | user | Connect the mirror showing this code to your account |
 | `POST /api/v1/events` | mirror | A mirror sends events |
 | `POST /api/v1/events/browser` | user | The same events, from the Train page |
 | `GET /api/v1/workouts` | user | Your workouts, newest first, with paging |
 | `GET /api/v1/workouts/{id}` | user | One workout and its sets |
 | `GET /api/v1/stats` | user | Sets and reps per exercise, and reps per day |
 | `GET /health` | anyone | Is the API up and can it reach the database |
+| `WS /api/v1/live` | user | A WebSocket with your new events, as they arrive |
 
 How events work:
 
@@ -67,6 +71,32 @@ How signing in works:
   cancelled.
 - **Users only see their own data.** Someone else's workout is "not found",
   not "forbidden", so ids can't be probed.
+
+How live updates work:
+
+- **A WebSocket per open dashboard.** Browsers can't add a header to a
+  WebSocket, and a token in the address ends up in logs, so the access token is
+  the first message. A wrong one closes the socket with code 4401.
+- **The server closes it when the token expires**, and the dashboard reconnects
+  with a fresh one. Other drops reconnect after 1, 2, 4 ... up to 30 seconds.
+- **After events are applied**, the new ones go to the owner's open
+  dashboards, which show who is training and reload their stats. Duplicates
+  aren't sent again.
+- **One process, one hub.** The subscribers are kept in memory, which is
+  enough while the API runs as one process. More processes would pass the
+  messages through PostgreSQL's LISTEN/NOTIFY or Redis.
+
+How connecting a mirror by QR code works:
+
+- **The mirror makes its own token** and sends only its SHA-256 hash. It gets a
+  short code back (8 characters, no 0/O or 1/I/L) and shows it as a QR code of
+  `<site>/pair/<code>`.
+- **You scan it with your phone** and press Connect. That creates the device
+  with the hash the mirror sent. The token itself never leaves the mirror.
+- **The mirror asks with its token** whether the code was claimed, then saves
+  the token like `register` does.
+- Codes expire after 10 minutes and work once. Claiming is rate limited per
+  user, so guessing codes is hopeless.
 
 ## Deploying
 
