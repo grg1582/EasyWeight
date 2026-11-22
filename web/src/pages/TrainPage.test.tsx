@@ -139,6 +139,7 @@ describe("TrainPage", () => {
     // jsdom can't go full screen, like Safari on iPhone: the view fills the window
     await user.click(screen.getByRole("button", { name: "Full screen" }));
     expect(stage).toHaveClass("fixed", "inset-0");
+    expect(stage).not.toHaveClass("relative"); // it would win over "fixed" in the CSS
     expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(stage).not.toHaveClass("fixed");

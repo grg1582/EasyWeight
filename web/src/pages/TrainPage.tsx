@@ -446,10 +446,10 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
           <section
             ref={stageRef}
             aria-label="Camera view"
-            className={`mirror relative overflow-hidden bg-black ${
+            className={`mirror overflow-hidden bg-black ${
               fullscreen.full
                 ? "fixed inset-0 z-50 h-[100dvh] w-full"
-                : "h-[70svh] w-full rounded-xl sm:aspect-video sm:h-auto sm:max-h-[78svh]"
+                : "relative h-[70svh] w-full rounded-xl sm:aspect-video sm:h-auto sm:max-h-[78svh]"
             }`}
           >
             {/* Mirrored, like a mirror. The landmarks are drawn on the same flip */}

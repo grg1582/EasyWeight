@@ -26,14 +26,17 @@ test("train with the camera", async ({ page }) => {
   await expect(page.getByText("Step into view")).toBeVisible();
   await expect(page.getByLabel("Reps")).toHaveText("0");
 
-  // Full screen and back
+  // Full screen and back. Real full screen stalls headless Chromium on CI, so
+  // this uses the fallback for browsers without it (Safari on iPhone): the
+  // view fills the window
   const stage = page.getByRole("region", { name: "Camera view" });
+  await page.evaluate(() => Object.defineProperty(document, "fullscreenEnabled", { value: false }));
   await page.getByRole("button", { name: "Full screen" }).click();
-  await expect(page.getByRole("button", { name: "Exit full screen" })).toBeVisible();
-  const box = (await stage.boundingBox())!;
-  expect(box.width).toBe(page.viewportSize()!.width);
-  await page.getByRole("button", { name: "Exit full screen" }).click();
+  await expect(stage).toHaveCSS("position", "fixed");
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Full screen" })).toBeVisible();
+  await expect(stage).not.toHaveCSS("position", "fixed");
 
   await page.getByRole("button", { name: "Stop" }).click();
   await expect(page.getByRole("region", { name: "Summary" })).toContainText("No reps this time");
