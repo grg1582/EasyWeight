@@ -104,8 +104,9 @@ class SetStartedData(BaseModel):
 
 class RepData(BaseModel):
     set_id: uuid.UUID
-    side: Side
-    count: int = Field(ge=1, description="This arm's rep count in the set, after this rep")
+    side: Side = Field(description='The arm, or "both" for squats and push-ups')
+    count: int = Field(ge=1, description="This arm's (or body's) rep count in the set, "
+                                         "after this rep")
     top: float | None = Field(default=None, description="Top angle (or height) of the rep")
 
 

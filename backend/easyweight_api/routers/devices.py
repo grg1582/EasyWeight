@@ -4,12 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from ..auth import current_user
 from ..db import get_db
 from ..demo import not_demo
 from ..models import Device, User
 from ..schemas import DeviceCreate, DeviceCreated, DeviceOut
 from ..security import current_device, hash_token, new_token
+from ..user_auth import current_user
 
 router = APIRouter(prefix="/api/v1/devices", tags=["devices"])
 

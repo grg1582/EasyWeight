@@ -16,7 +16,7 @@ https://github.com/user-attachments/assets/cbb6c348-219c-41a6-bf49-df96ef5d7411
 
 ## Try it
 
-Open **[easyweight.onrender.com](https://easyweight.onrender.com)** and press **Try the demo**: an account with two months of simulated workouts, no sign-up needed. Then open **Train**, allow the camera, and do a few bicep curls, lateral raises or overhead presses. The pose model runs in your browser, so the video never leaves your device.
+Open **[easyweight.onrender.com](https://easyweight.onrender.com)** and press **Try the demo**: an account with two months of simulated workouts, no sign-up needed. Then open **Train**, allow the camera, and do a few bicep curls, lateral raises, overhead presses or squats (or push-ups, side on to the camera). The pose model runs in your browser, so the video never leaves your device.
 
 | On the mirror, or in the browser | After 8 seconds without a rep |
 |:---:|:---:|
@@ -29,8 +29,9 @@ Open **[easyweight.onrender.com](https://easyweight.onrender.com)** and press **
 
 ## Highlights
 
-- **Computer vision that knows what you're doing.** MediaPipe pose landmarks become joint angles, and a state machine per arm counts reps of three exercises. The first rep of a set decides the exercise, 8 seconds of stillness starts a rest timer, and a sip of water during the rest isn't counted as a curl. [How the counting works](docs/how-counting-works.md)
-- **A coach, not just a counter.** A rep that stopped halfway gets "Curl all the way up", reps too fast to control the weight get "Slow down", right under the count. In the rest after each set it sums the set up ("10 reps · 2 partial") and says what to do on the next one, or gives a form tip for the exercise after a clean set.
+- **Computer vision that knows what you're doing.** MediaPipe pose landmarks become joint angles and heights, and a state machine counts reps of five exercises: curls, lateral raises and overhead presses arm by arm, squats and push-ups for the whole body. The first rep of a set decides the exercise, posture tells standing from lying down, 8 seconds of stillness starts a rest timer, and a sip of water during the rest isn't counted as a curl. Readings are steadied against jitter, frames where a joint is lost, different frame rates and standing side on. [How the counting works](docs/how-counting-works.md)
+- **Exercises are data, not code.** Each exercise is a definition of which joints to measure, where a rep starts and ends, the posture it needs and what the coach says. Adding one doesn't touch the counting logic.
+- **A coach, not just a counter.** A rep that stopped halfway gets "Curl all the way up", sagging hips in a push-up get "Keep your body in a straight line", reps too fast to control the weight get "Slow down", right under the count. In the rest after each set it sums the set up ("10 reps · 2 partial") and says what to do on the next one, or gives a form tip for the exercise after a clean set.
 - **Live, and set up with a QR code.** Every rep reaches your open dashboards within a second over a WebSocket. A new mirror shows a QR code: scan it with your phone and it's connected, with no password typed on the mirror and its token never leaving it.
 - **One counting logic, two languages.** The mirror runs it in Python, the browser in TypeScript. A cross language parity suite plays the same synthetic sessions through both and requires the exact same reps, sets and events.
 - **Works offline, never double counts.** The mirror writes every event to a local SQLite outbox and sends it when the network is back. Each event carries its own id, so retries are harmless, and each gets its own result, so one bad event never blocks a backlog.
@@ -88,7 +89,7 @@ Contributing? See [CONTRIBUTING.md](CONTRIBUTING.md) for the architecture, the p
 
 | | |
 |---|---|
-| [How the counting works](docs/how-counting-works.md) | The angles, the set and rest logic, telling drinking from curling, the coach, and the tuning constants |
+| [How the counting works](docs/how-counting-works.md) | The five exercises, where the camera should be, the set and rest logic, steadying the readings, the coach, adding an exercise, and the tuning constants |
 | [The mirror app](docs/mirror-app.md) | Setup, options, recording and replaying sessions, connecting the mirror by QR code |
 | [Backend and API](docs/backend.md) | Every endpoint, how events, sign-in, live updates and QR pairing work, and deploying |
 | [Web app](docs/web.md) | The dashboard, live updates, and training in the browser |

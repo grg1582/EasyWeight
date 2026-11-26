@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .models import Device, Event, Rep, Workout, WorkoutSet
+from .models import WHOLE_BODY, Device, Event, Rep, Side, Workout, WorkoutSet
 from .schemas import (
     EventBatchResult,
     EventResult,
@@ -127,6 +127,10 @@ def _apply(db, device, event):
             workout_set.set_number = data.set_number
     elif isinstance(event, RepCounted):
         workout_set = _set(db, device, data.set_id)
+        whole_body = workout_set.exercise in WHOLE_BODY
+        if whole_body != (data.side == Side.both):
+            raise Rejected(f"a {workout_set.exercise} rep has side "
+                           f"{'both' if whole_body else 'left or right'}, not {data.side}")
         db.add(Rep(set=workout_set, side=data.side, count=data.count, at=event.at, top=data.top))
         workout_set.reps = max(workout_set.reps, data.count)
     elif isinstance(event, SetEnded):

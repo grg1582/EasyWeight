@@ -16,11 +16,27 @@ export default {
         muted: v("muted"),
         faint: v("faint"),
         accent: v("accent"),
+        "accent-strong": v("accent-strong"),
         "accent-ink": v("accent-ink"),
         danger: v("danger"),
+        success: v("success"),
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        // Self-hosted (@fontsource-variable/inter, imported in main.tsx)
+        sans: ["Inter Variable", "ui-sans-serif", "system-ui", "sans-serif"],
+      },
+      boxShadow: {
+        card: "0 1px 2px rgb(0 0 0 / 0.04)",
+        "card-hover": "0 2px 8px rgb(0 0 0 / 0.06)",
+      },
+      keyframes: {
+        "fade-in": {
+          from: { opacity: "0", transform: "translateY(4px)" },
+          to: { opacity: "1", transform: "none" },
+        },
+      },
+      animation: {
+        "fade-in": "fade-in 200ms ease-out both",
       },
     },
   },

@@ -2,32 +2,45 @@
 // and returns numbers, so it's tested without a camera or the pose model.
 
 import {
-  CURL_DOWN_ANGLE,
-  CURL_UP_ANGLE,
   DRINK_DISTANCE,
-  PRESS_DOWN_HEIGHT,
-  PRESS_UP_HEIGHT,
-  RAISE_DOWN_ANGLE,
-  RAISE_UP_ANGLE,
+  MAX_GAP_SECONDS,
   SET_IDLE_SECONDS,
-  SIDES,
   SMOOTHING,
+  SMOOTHING_FPS,
+  type CounterSide,
   type Exercise,
-  type Side,
 } from "./config";
+import { EXERCISES, sidesOf } from "./exercises";
 
-/** One arm doing one exercise: the angle goes past downAngle, then past upAngle
- * = 1 rep. For a curl the elbow angle gets smaller on the way up, for a raise
- * the shoulder angle gets bigger, for a press the wrist height gets bigger */
-export class ArmCounter {
+/** How much of a new reading goes into the smoothed one, dt seconds after the
+ * last: SMOOTHING at SMOOTHING_FPS, and just as quick (in seconds) at others */
+export function smoothingFactor(dt: number | null): number {
+  if (dt === null) return SMOOTHING;
+  return 1 - (1 - SMOOTHING) ** (dt * SMOOTHING_FPS);
+}
+
+function median3([a, b, c]: number[]): number {
+  return Math.max(Math.min(a!, b!), Math.min(Math.max(a!, b!), c!));
+}
+
+/** One arm (or the whole body) doing one exercise: the reading goes past
+ * downAngle, then past upAngle = 1 rep. Each reading goes through a median of
+ * the last 3, then smoothing that reacts as fast at any frame rate */
+export class RepCounter {
   readonly sign: number; // 1 = the angle shrinks on the way up
   reps = 0;
   angle: number | null = null; // smoothed
   stage: "down" | "up" | null = null;
   visible = false;
+  formOk = false; // whether the latest reading's form fit this exercise
   mouth: number | null = null;
   closest = Infinity; // closest the wrist came to the mouth since the arm was down
   top: number | null = null; // furthest up the angle got since the arm was down
+  clean = true; // the form check held since the arm was down
+  repClean = true; // and it held through the latest rep
+  repAt: number | null = null; // when the latest rep was reached
+  private recent: number[] = [];
+  private lastSeen: number | null = null;
 
   constructor(
     readonly downAngle: number,
@@ -36,21 +49,49 @@ export class ArmCounter {
     this.sign = downAngle > upAngle ? 1 : -1;
   }
 
-  /** Feed one reading (or null). Returns true when this reading completes a rep */
-  update(rawAngle: number | null, mouth: number | null = null, formOk = true): boolean {
+  /** Feed one reading (or null), the mouth distance, whether the form fits,
+   * the time in seconds and whether the form check holds. Returns true when
+   * this reading completes a rep */
+  update(
+    rawAngle: number | null,
+    mouth: number | null = null,
+    formOk = true,
+    now: number | null = null,
+    checkOk = true,
+  ): boolean {
     this.visible = rawAngle !== null;
     this.mouth = mouth;
     if (rawAngle === null) return false;
+    this.formOk = formOk;
+    let dt: number | null = null;
+    if (now !== null && this.lastSeen !== null) {
+      dt = now - this.lastSeen;
+      if (dt > MAX_GAP_SECONDS) {
+        // out of sight for a while: start over from here
+        this.angle = null;
+        this.recent = [];
+        dt = null;
+      }
+    }
+    this.lastSeen = now;
+    this.recent = [...this.recent, rawAngle].slice(-3);
+    const reading = this.recent.length === 3 ? median3(this.recent) : rawAngle;
     if (mouth !== null) this.closest = Math.min(this.closest, mouth);
-    this.angle = this.angle === null ? rawAngle : this.angle + SMOOTHING * (rawAngle - this.angle);
+    this.angle = this.angle === null ? reading : this.angle + smoothingFactor(dt) * (reading - this.angle);
     if (this.top === null || this.sign * (this.angle - this.top) < 0) this.top = this.angle;
     if (this.sign * (this.angle - this.downAngle) > 0) {
       this.stage = "down";
       this.closest = Infinity;
       this.top = null;
-    } else if (this.sign * (this.angle - this.upAngle) < 0 && this.stage === "down" && formOk) {
+      this.clean = true;
+      return false;
+    }
+    if (this.stage === "down" && !checkOk) this.clean = false;
+    if (this.sign * (this.angle - this.upAngle) < 0 && this.stage === "down" && formOk) {
       this.stage = "up";
       this.reps += 1;
+      this.repClean = this.clean;
+      this.repAt = now;
       return true;
     }
     return false;
@@ -70,23 +111,30 @@ export interface SetEntry {
   reps: number;
 }
 
-type Pair = Record<Side, ArmCounter>;
+/** The counters of one exercise: left and right, or just both */
+export type Counters = Partial<Record<CounterSide, RepCounter>>;
 
-const pair = (down: number, up: number): Pair => ({
-  left: new ArmCounter(down, up),
-  right: new ArmCounter(down, up),
-});
+interface Candidate {
+  exercise: Exercise;
+  counter: RepCounter;
+  reps: number;
+  at: number;
+}
 
 /** Splits the reps into sets and knows which exercise each set is. See the
  * Python Workout for the full story: the first rep of a set decides the
- * exercise, no rep for SET_IDLE_SECONDS means resting, and a curl during rest
- * is held back until it's clear it isn't drinking */
+ * exercise, no rep for SET_IDLE_SECONDS means resting, a curl during rest is
+ * held back until it's clear it isn't drinking, and a squat set starts only on
+ * its second squat */
 export class Workout {
-  readonly counters: Record<Exercise, Pair> = {
-    curl: pair(CURL_DOWN_ANGLE, CURL_UP_ANGLE),
-    raise: pair(RAISE_DOWN_ANGLE, RAISE_UP_ANGLE),
-    press: pair(PRESS_DOWN_HEIGHT, PRESS_UP_HEIGHT),
-  };
+  readonly counters = Object.fromEntries(
+    (Object.keys(EXERCISES) as Exercise[]).map((exercise) => {
+      const spec = EXERCISES[exercise];
+      const counters: Counters = {};
+      for (const side of sidesOf(exercise)) counters[side] = new RepCounter(spec.down, spec.up);
+      return [exercise, counters];
+    }),
+  ) as Record<Exercise, Counters>;
   /** Every set since the start. reset() doesn't clear it */
   readonly history: SetEntry[] = [];
   exercise: Exercise | null = null;
@@ -94,32 +142,45 @@ export class Workout {
   prevExercise: Exercise | null = null;
   prevSet = 0;
   lastRep: number | null = null;
-  pending: ArmCounter | null = null;
+  pending: RepCounter | null = null;
+  pendingExercise: Exercise | null = null;
+  candidate: Candidate | null = null;
 
   constructor() {
     this.reset();
   }
 
+  /** The counters of an exercise, in order */
+  countersOf(exercise: Exercise): [CounterSide, RepCounter][] {
+    return sidesOf(exercise).map((side) => [side, this.counters[exercise][side]!]);
+  }
+
   /** The (left, right) counters to show: the set's exercise, or before the
-   * first rep, whichever exercise the arms are further into */
-  arms(): [ArmCounter, ArmCounter] {
-    let chosen: Pair;
+   * first rep, whichever exercise (with the right form) is further along. An
+   * exercise of the whole body gives its one counter twice */
+  arms(): [RepCounter, RepCounter] {
+    let chosen: Exercise;
     if (this.exercise) {
-      chosen = this.counters[this.exercise];
+      chosen = this.exercise;
     } else {
-      const score = (p: Pair) => Math.max(p.left.progress(), p.right.progress());
-      chosen = Object.values(this.counters).reduce((best, p) => (score(p) > score(best) ? p : best));
+      const score = (e: Exercise) =>
+        Math.max(...this.countersOf(e).map(([, c]) => (c.formOk ? c.progress() : 0)));
+      const all = Object.keys(EXERCISES) as Exercise[];
+      chosen = all.reduce((best, e) => (score(e) > score(best) ? e : best));
     }
-    return [chosen.left, chosen.right];
+    const c = this.counters[chosen];
+    if (c.both) return [c.both, c.both];
+    return [c.left!, c.right!];
   }
 
   clearReps() {
-    for (const p of Object.values(this.counters)) for (const side of SIDES) p[side].reps = 0;
+    for (const counters of Object.values(this.counters)) {
+      for (const c of Object.values(counters)) c.reps = 0;
+    }
   }
 
   setReps(): number {
-    const p = this.counters[this.exercise as Exercise];
-    return Math.max(p.left.reps, p.right.reps);
+    return Math.max(...this.countersOf(this.exercise as Exercise).map(([, c]) => c.reps));
   }
 
   resting(now: number): boolean {
@@ -130,37 +191,68 @@ export class Workout {
     return now - (this.lastRep ?? now);
   }
 
-  startSet(exercise: Exercise, counter: ArmCounter, now: number, replace = false) {
+  startSet(exercise: Exercise, counter: RepCounter, now: number, replace = false, reps = 1) {
     this.set = exercise === this.prevExercise ? this.prevSet + 1 : 1;
     this.exercise = exercise;
     this.clearReps();
-    counter.reps = 1;
+    counter.reps = reps;
     this.lastRep = now;
-    this.pending = null;
-    const entry: SetEntry = { exercise, set: this.set, reps: 1 };
+    this.pending = this.pendingExercise = this.candidate = null;
+    const entry: SetEntry = { exercise, set: this.set, reps };
     if (replace && this.history.length) this.history[this.history.length - 1] = entry;
     else this.history.push(entry);
   }
 
-  nextSet(exercise: Exercise, counter: ArmCounter, now: number) {
+  nextSet(exercise: Exercise, counter: RepCounter, now: number, reps = 1) {
     this.prevExercise = this.exercise;
     this.prevSet = this.set;
-    this.startSet(exercise, counter, now);
+    this.startSet(exercise, counter, now, false, reps);
+  }
+
+  /** Whether a set of 1 rep can turn into a set of exercise */
+  private canSwitch(exercise: Exercise): boolean {
+    return this.setReps() < 2 && !EXERCISES[exercise].not_after.includes(this.exercise as Exercise);
+  }
+
+  /** Start a set of exercise however fits now. False if it can't */
+  private begin(exercise: Exercise, counter: RepCounter, now: number, reps: number): boolean {
+    if (this.resting(now)) this.nextSet(exercise, counter, now, reps);
+    else if (this.exercise === null) this.startSet(exercise, counter, now, false, reps);
+    else if (this.canSwitch(exercise)) this.startSet(exercise, counter, now, true, reps);
+    else return false;
+    return true;
+  }
+
+  /** A rep of an exercise that needs more than one rep to start a set */
+  private confirm(exercise: Exercise, counter: RepCounter, now: number): boolean {
+    counter.reps -= 1;
+    let c = this.candidate;
+    if (c !== null && c.counter === counter && now - c.at <= SET_IDLE_SECONDS) {
+      c.reps += 1;
+      c.at = now;
+    } else {
+      c = this.candidate = { exercise, counter, reps: 1, at: now };
+    }
+    if (c.reps < EXERCISES[exercise].confirm_reps) return false;
+    this.candidate = null;
+    return this.begin(exercise, counter, now, c.reps);
   }
 
   /** Call after counter completed a rep of exercise. Returns true if it counts */
-  addRep(now: number, exercise: Exercise, counter: ArmCounter): boolean {
+  addRep(now: number, exercise: Exercise, counter: RepCounter): boolean {
+    const spec = EXERCISES[exercise];
+    const starting = this.exercise !== exercise || this.resting(now);
+    if (starting && spec.confirm_reps > 1) return this.confirm(exercise, counter, now);
     if (this.resting(now)) {
-      if (exercise === "curl") {
+      if (spec.could_be_drinking) {
         counter.reps -= 1;
-        this.pending ??= counter;
+        if (this.pending === null) {
+          this.pending = counter;
+          this.pendingExercise = exercise;
+        }
         return false;
       }
       this.nextSet(exercise, counter, now);
-      return true;
-    }
-    if (this.exercise === null) {
-      this.startSet(exercise, counter, now);
       return true;
     }
     if (exercise === this.exercise) {
@@ -168,10 +260,9 @@ export class Workout {
       this.history[this.history.length - 1]!.reps = this.setReps();
       return true;
     }
-    if (this.setReps() < 2 && !(this.exercise === "press" && exercise === "curl")) {
-      // One rep isn't enough to be sure: the first "curl" is often picking up
-      // the weights. But never from press to curl: lowering a press looks like a curl
-      this.startSet(exercise, counter, now, true);
+    if (this.exercise === null || this.canSwitch(exercise)) {
+      // Never from press to curl (not_after): lowering a press looks like a curl
+      this.startSet(exercise, counter, now, this.exercise !== null);
       return true;
     }
     counter.reps -= 1; // not the exercise this set is doing
@@ -183,11 +274,11 @@ export class Workout {
     const counter = this.pending;
     if (counter === null) return false;
     if (counter.closest < DRINK_DISTANCE) {
-      this.pending = null; // drinking
+      this.pending = this.pendingExercise = null; // drinking
       return false;
     }
     if (counter.stage === "down") {
-      this.nextSet("curl", counter, now);
+      this.nextSet(this.pendingExercise!, counter, now);
       return true;
     }
     return false;
@@ -200,6 +291,6 @@ export class Workout {
     this.prevExercise = null;
     this.prevSet = 0;
     this.lastRep = null;
-    this.pending = null;
+    this.pending = this.pendingExercise = this.candidate = null;
   }
 }

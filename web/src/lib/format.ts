@@ -4,9 +4,11 @@ export const EXERCISES: Record<Exercise, { name: string; color: string }> = {
   curl: { name: "Bicep curl", color: "var(--ex-curl)" },
   raise: { name: "Lateral raise", color: "var(--ex-raise)" },
   press: { name: "Overhead press", color: "var(--ex-press)" },
+  squat: { name: "Squat", color: "var(--ex-squat)" },
+  pushup: { name: "Push-up", color: "var(--ex-pushup)" },
 };
 
-export const EXERCISE_ORDER: Exercise[] = ["curl", "raise", "press"];
+export const EXERCISE_ORDER: Exercise[] = ["curl", "raise", "press", "squat", "pushup"];
 
 const number = new Intl.NumberFormat("en-US");
 

@@ -15,7 +15,7 @@ export function WorkoutList({ workouts }: { workouts: WorkoutSummary[] }) {
   return (
     <div className="card overflow-hidden">
       <table className="w-full text-left text-sm">
-        <thead className="hidden border-b border-line text-xs uppercase tracking-wide text-faint sm:table-header-group">
+        <thead className="hidden border-b border-line bg-ink/[0.02] text-xs uppercase tracking-wide text-faint sm:table-header-group">
           <tr>
             <th className="px-4 py-3 font-medium">When</th>
             <th className="px-4 py-3 font-medium">Exercises</th>
@@ -28,7 +28,7 @@ export function WorkoutList({ workouts }: { workouts: WorkoutSummary[] }) {
           {workouts.map((w) => {
             const seconds = secondsBetween(w.started_at, w.ended_at);
             return (
-              <tr key={w.id} className="group relative hover:bg-ink/[0.03]">
+              <tr key={w.id} className="group relative transition-colors hover:bg-ink/[0.03]">
                 <td className="block px-4 pt-3 sm:table-cell sm:py-3">
                   <Link
                     to={`/workouts/${w.id}`}
@@ -57,7 +57,7 @@ export function WorkoutList({ workouts }: { workouts: WorkoutSummary[] }) {
                   {seconds !== null ? (
                     formatDuration(seconds)
                   ) : isRecent(w.started_at) ? (
-                    <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+                    <span className="pill bg-accent/10 text-accent">
                       In progress
                     </span>
                   ) : (

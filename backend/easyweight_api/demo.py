@@ -16,12 +16,12 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 from . import simulator
-from .auth import current_user, hash_password
 from .config import get_settings
 from .ingest import ingest
 from .models import Device, Event, User, Workout
 from .schemas import DeviceEvent
 from .security import hash_token, new_token
+from .user_auth import current_user, hash_password
 
 HISTORY_DAYS = 60
 DEMO_LOCK = 0x45570001  # any number no other code locks on

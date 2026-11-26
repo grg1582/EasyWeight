@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.orm import Session
 
-from ..auth import current_user
 from ..db import get_db
-from ..models import Device, User, Workout, WorkoutSet
+from ..models import User, Workout, WorkoutSet
 from ..schemas import DayStats, ExerciseStats, Stats
+from ..user_auth import current_user
+from .workouts import only_mine
 
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
 
@@ -24,14 +25,10 @@ def stats(
     exercise, and reps per day (UTC dates). Computed by the database, not in Python"""
     since = datetime.now(UTC) - timedelta(days=days)
     sets = (
-        select(WorkoutSet)
-        .join(Workout)
-        .join(Device)
-        .where(Device.owner_id == user.id, WorkoutSet.started_at >= since)
+        only_mine(select(WorkoutSet).join(Workout), user, device_id)
+        .where(WorkoutSet.started_at >= since)
+        .subquery()
     )
-    if device_id:
-        sets = sets.where(Workout.device_id == device_id)
-    sets = sets.subquery()
 
     per_exercise = db.execute(
         select(sets.c.exercise, func.count(), func.coalesce(func.sum(sets.c.reps), 0))

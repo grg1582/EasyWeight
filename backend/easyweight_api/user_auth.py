@@ -51,8 +51,13 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
+def normalize_email(email: str) -> str:
+    """Emails are stored trimmed and lowercase: " Name@Example.com" is name@example.com"""
+    return email.strip().lower()
+
+
 def authenticate(db: Session, email: str, password: str) -> User | None:
-    user = db.scalar(select(User).where(User.email == email.strip().lower()))
+    user = db.scalar(select(User).where(User.email == normalize_email(email)))
     if user is None:
         verify_password(password, _DUMMY_HASH)
         return None

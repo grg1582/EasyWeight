@@ -21,6 +21,18 @@ def test_simulated_workouts_look_like_a_mirror_sent_them():
     assert times == sorted(times)
 
 
+def test_simulated_squats_and_pushups_count_for_the_whole_body():
+    first = datetime(2026, 10, 1, tzinfo=UTC)
+    events = simulator.history(first, first + timedelta(days=28), seed=1)
+    exercise = {e["data"]["set_id"]: e["data"]["exercise"]
+                for e in events if e["type"] == "set_started"}
+    assert set(exercise.values()) == set(simulator.EXERCISES)
+    for e in events:
+        if e["type"] == "rep":
+            whole_body = exercise[e["data"]["set_id"]] in simulator.WHOLE_BODY
+            assert (e["data"]["side"] == "both") == whole_body
+
+
 def test_demo_sign_in(client):
     r = client.post("/api/v1/auth/demo")
     assert r.status_code == 200
@@ -29,7 +41,10 @@ def test_demo_sign_in(client):
     assert me["is_demo"] is True
     stats = client.get("/api/v1/stats?days=30", headers=headers).json()
     assert stats["workouts"] >= 8
-    assert {e["exercise"] for e in stats["per_exercise"]} == {"curl", "raise", "press"}
+    # 2 or 3 of the exercises each workout, picked at random
+    shown = {e["exercise"] for e in stats["per_exercise"]}
+    assert len(shown) >= 3
+    assert shown <= set(simulator.EXERCISES)
 
 
 def test_demo_is_read_only(client):

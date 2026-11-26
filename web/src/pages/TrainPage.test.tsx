@@ -16,8 +16,14 @@ vi.mock("../auth/AuthContext", () => ({
 
 // jsdom has no camera or video decoding: each read of currentTime is a new frame
 let frameTime = 0;
+// How far the fake camera has moved the clock. The counting smooths over real
+// time, so frames must be timed like a camera's, not as fast as the test runs
+let cameraTime = 0;
 beforeEach(() => {
   frameTime = 0;
+  cameraTime = 0;
+  const realNow = performance.now.bind(performance);
+  vi.spyOn(performance, "now").mockImplementation(() => realNow() + cameraTime);
   auth.isDemo = false;
   const video = HTMLVideoElement.prototype;
   Object.defineProperty(video, "readyState", { configurable: true, get: () => 4 });
@@ -36,11 +42,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A detector that plays back the synthetic "curls" session: 10 curls */
+/** A detector that plays back the synthetic "curls" session (10 curls) at
+ * twice its speed, far faster than anyone could lift. Once it has played them
+ * all it holds the last frame, and the clock stands still */
 function fakes(overrides: Partial<TrainDeps> = {}) {
   const frames = framesOf("curls");
   let i = 0;
-  const detector: PoseDetector = { detect: () => frames[i++] ?? frames[frames.length - 1]!, close: vi.fn() };
+  const detector: PoseDetector = {
+    detect: () => {
+      if (i >= frames.length) return frames[frames.length - 1]!;
+      cameraTime += 1000 / 60;
+      return frames[i++]!;
+    },
+    close: vi.fn(),
+  };
   const track = { stop: vi.fn() };
   const deps: TrainDeps = {
     loadDetector: vi.fn(async () => detector),
@@ -113,9 +128,6 @@ describe("TrainPage", () => {
 
   it("shows the rest time after 8 seconds without a rep, like the mirror", async () => {
     fakeApi({ "POST /events/browser": () => ({ body: { applied: 1 } }) });
-    const realNow = performance.now.bind(performance);
-    let later = 0;
-    vi.spyOn(performance, "now").mockImplementation(() => realNow() + later);
     renderPage(fakes().deps);
     await userEvent.click(screen.getByRole("button", { name: "Start camera" }));
     await waitFor(() => expect(screen.getByLabelText("Reps")).toHaveTextContent("10"), {
@@ -123,7 +135,7 @@ describe("TrainPage", () => {
     });
     expect(screen.queryByRole("timer")).not.toBeInTheDocument();
 
-    later = 65_000; // a minute after the last rep
+    cameraTime += 65_000; // a minute after the last rep
     const timer = await screen.findByRole("timer", { name: "Rest time" });
     expect(timer.textContent).toMatch(/^1:0[5-6]$/);
     expect(screen.getByText("REST · SET 1 DONE")).toBeInTheDocument();

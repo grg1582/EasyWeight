@@ -1,4 +1,16 @@
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  AlertCircle,
+  Camera,
+  CheckCircle2,
+  Dumbbell,
+  Maximize2,
+  Minimize2,
+  ShieldCheck,
+  Square,
+  Timer,
+  UserRound,
+} from "lucide-react";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -48,6 +60,7 @@ interface View {
   cue: string | null; // feedback on the reps, like "Curl all the way up"
   summary: Summary | null; // during the rest: how the set went, and what to do next
   progress: [number, number]; // left and right arm: 0 = down, 1 = up
+  wholeBody: boolean; // a squat or push-up: one count for the body, not one per arm
   history: SetEntry[];
   unsent: number;
   failedSends: number;
@@ -69,6 +82,7 @@ function snapshot(session: TrainingSession, seen: boolean, now: number): View {
     cue: resting ? null : session.coach.text(now),
     summary: resting ? session.coach.summary(workout) : null,
     progress: [left.progress(), right.progress()],
+    wholeBody: left === right,
     history: workout.history.map((entry) => ({ ...entry })),
     unsent: session.unsent,
     failedSends: session.failedSends,
@@ -88,14 +102,14 @@ function cameraError(error: unknown): string {
   return error instanceof Error ? error.message : "Couldn't start the camera.";
 }
 
-function ArmMeter({ label, value }: { label: string; value: number }) {
+function ArmMeter({ label, value, name }: { label: string; value: number; name?: string }) {
   return (
     <div className="flex items-center gap-3 text-sm">
       <span className="w-10 text-muted">{label}</span>
       <div
         className="h-2 flex-1 rounded-full bg-line"
         role="meter"
-        aria-label={`${label} arm`}
+        aria-label={name ?? `${label} arm`}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(value * 100)}
@@ -130,7 +144,7 @@ function SetList({ history }: { history: SetEntry[] }) {
 
 /** A hint while there's nothing to count yet */
 function status(view: View): string | null {
-  if (!view.seen) return "Step into view: head to waist, both arms";
+  if (!view.seen) return "Step into view";
   if (!view.exercise) return "Ready: start your first rep";
   return null;
 }
@@ -381,23 +395,58 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
 
       {phase.name === "intro" && (
         <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
-          <section className="card p-6">
+          <section className="card p-6 sm:p-8">
             <h2 className="text-lg font-semibold">How it works</h2>
-            <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted">
-              <li>Put your phone or laptop where the camera sees you from the head to the waist.</li>
-              <li>
-                Do <ExerciseTag exercise="curl" />, <ExerciseTag exercise="raise" /> or{" "}
-                <ExerciseTag exercise="press" />. The first rep tells which one.
-              </li>
-              <li>Rest about 8 seconds between sets: the next rep starts the next set.</li>
-              <li>Press Stop when you're done.</li>
+            <ol className="mt-5 grid gap-3 sm:grid-cols-2">
+              {[
+                {
+                  icon: UserRound,
+                  text: (
+                    <>
+                      Put your phone or laptop where the camera sees you from the head to the knees.
+                      For push-ups, stand it side on.
+                    </>
+                  ),
+                },
+                {
+                  icon: Dumbbell,
+                  text: (
+                    <>
+                      Do <ExerciseTag exercise="curl" />, <ExerciseTag exercise="raise" />,{" "}
+                      <ExerciseTag exercise="press" />, <ExerciseTag exercise="squat" /> or{" "}
+                      <ExerciseTag exercise="pushup" />. The first rep tells which one.
+                    </>
+                  ),
+                },
+                {
+                  icon: Timer,
+                  text: <>Rest about 8 seconds between sets: the next rep starts the next set.</>,
+                },
+                { icon: Square, text: <>Press Stop when you're done.</> },
+              ].map(({ icon: Icon, text }, k) => (
+                <li key={k} className="flex gap-3 rounded-lg border border-line p-4 text-sm text-muted">
+                  <span className="icon-chip h-8 w-8">
+                    <Icon aria-hidden className="h-4 w-4" />
+                  </span>
+                  <span>
+                    <span className="mb-0.5 block text-xs font-semibold uppercase tracking-wide text-faint">
+                      Step {k + 1}
+                    </span>
+                    {text}
+                  </span>
+                </li>
+              ))}
             </ol>
-            <button type="button" className="btn-primary mt-6" onClick={() => void start()}>
+            <button type="button" className="btn-primary btn-lg mt-6" onClick={() => void start()}>
+              <Camera aria-hidden className="h-5 w-5" />
               Start camera
             </button>
           </section>
-          <aside className="card p-5 text-sm text-muted">
-            <h2 className="font-semibold text-ink">Your video stays on your device</h2>
+          <aside className="card h-fit border-success/25 bg-success/[0.04] p-5 text-sm text-muted">
+            <h2 className="flex items-center gap-2 font-semibold text-ink">
+              <ShieldCheck aria-hidden className="h-5 w-5 text-success" />
+              Your video stays on your device
+            </h2>
             <p className="mt-2">
               The pose model runs in your browser. Only the reps are sent, never the picture.
             </p>
@@ -418,8 +467,11 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
       {phase.name === "starting" && <Spinner label={phase.step} />}
 
       {phase.name === "error" && (
-        <div role="alert" className="card p-6">
-          <p className="text-sm text-danger">{phase.message}</p>
+        <div role="alert" className="card max-w-xl border-danger/30 p-6">
+          <p className="flex gap-2 text-sm text-danger">
+            <AlertCircle aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+            {phase.message}
+          </p>
           <button type="button" className="btn-ghost mt-4" onClick={() => void start()}>
             Try again
           </button>
@@ -451,19 +503,26 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
             <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-black/60 to-transparent" />
             <MirrorHud view={view} />
             {status(view) && (
-              <div className="absolute bottom-3 left-3 max-w-[calc(100%-15rem)] rounded-lg bg-black/60 px-3 py-1.5 text-sm font-medium text-white">
+              <div className="absolute bottom-3 left-3 max-w-[calc(100%-10rem)] rounded-lg bg-black/60 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm">
                 {status(view)}
               </div>
             )}
             <div className="absolute bottom-3 right-3 flex gap-2">
               <button
                 type="button"
-                className="btn bg-black/60 text-white hover:bg-black/75"
+                className="btn bg-black/60 px-2.5 text-white backdrop-blur-sm hover:bg-black/75"
+                aria-label={fullscreen.full ? "Exit full screen" : "Full screen"}
+                title={fullscreen.full ? "Exit full screen" : "Full screen"}
                 onClick={fullscreen.toggle}
               >
-                {fullscreen.full ? "Exit full screen" : "Full screen"}
+                {fullscreen.full ? (
+                  <Minimize2 aria-hidden className="h-5 w-5" />
+                ) : (
+                  <Maximize2 aria-hidden className="h-5 w-5" />
+                )}
               </button>
               <button type="button" className="btn-primary" onClick={() => void stop()}>
+                <Square aria-hidden className="h-3.5 w-3.5 fill-current" />
                 Stop
               </button>
             </div>
@@ -471,9 +530,15 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
 
           <section className="card grid gap-6 p-5 md:grid-cols-[16rem_1fr]" aria-label="This session">
             <div className="space-y-2">
-              <h2 className="mb-3 text-sm font-semibold">Arms</h2>
-              <ArmMeter label="Left" value={view.progress[0]} />
-              <ArmMeter label="Right" value={view.progress[1]} />
+              <h2 className="mb-3 text-sm font-semibold">{view.wholeBody ? "Body" : "Arms"}</h2>
+              {view.wholeBody ? (
+                <ArmMeter label="Depth" value={view.progress[0]} name="Rep depth" />
+              ) : (
+                <>
+                  <ArmMeter label="Left" value={view.progress[0]} />
+                  <ArmMeter label="Right" value={view.progress[1]} />
+                </>
+              )}
             </div>
             <div>
               <h2 className="text-sm font-semibold">This session</h2>
@@ -489,8 +554,11 @@ export function TrainPage({ deps = realDeps }: { deps?: TrainDeps }) {
       )}
 
       {phase.name === "done" && (
-        <section className="card max-w-xl p-6" aria-label="Summary">
-          <h2 className="text-lg font-semibold">
+        <section className="card max-w-xl p-6 sm:p-8" aria-label="Summary">
+          <span className="icon-chip mb-4 h-11 w-11 rounded-xl bg-success/10 text-success">
+            <CheckCircle2 aria-hidden className="h-5 w-5" />
+          </span>
+          <h2 className="text-xl font-semibold tracking-tight">
             {phase.history.length
               ? `${formatNumber(phase.history.reduce((n, s) => n + s.reps, 0))} reps in ${phase.history.length} ${phase.history.length === 1 ? "set" : "sets"}`
               : "No reps this time"}

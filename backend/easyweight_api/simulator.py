@@ -4,7 +4,8 @@ Used for the demo account, and handy for trying the dashboard without a
 camera. The events go through the same checks and the same ingest as real
 ones, so the demo shows exactly what a real mirror would produce.
 
-A workout is 2 or 3 exercises of 2 to 4 sets. Both arms count each rep, the
+A workout is 2 or 3 exercises of 2 to 4 sets. Both arms count each rep (or,
+for squats and push-ups, the whole body counts it once, side "both"), the
 reps drop a little as you tire, a rep takes 2 to 3 seconds, and the rest
 between sets is 45 seconds to 2 minutes. Over the weeks the reps creep up.
 """
@@ -16,8 +17,11 @@ from datetime import UTC, datetime, timedelta
 EXERCISES = {
     "curl": (11, (32.0, 48.0)),    # elbow angle at the top, smaller = higher curl
     "raise": (12, (95.0, 78.0)),   # shoulder angle at the top
-    "press": (8, (1.35, 1.05)),    # wrist height above the shoulder, in shoulder widths
+    "press": (8, (1.35, 1.05)),    # wrist height above the shoulder, in body widths
+    "squat": (12, (0.05, 0.28)),   # hip height above the knee at the bottom, in shin lengths
+    "pushup": (15, (72.0, 88.0)),  # elbow angle at the bottom
 }
+WHOLE_BODY = {"squat", "pushup"}
 SET_IDLE_SECONDS = 8      # the mirror ends a set this long after the last rep
 MAX_REST_SECONDS = 180    # and the workout after this long without a set
 
@@ -45,8 +49,10 @@ def workout_events(start: datetime, rng: random.Random, progress: float = 0.0) -
                                  exercise=exercise, set_number=number))
             reps = max(3, round(usual + 2 * progress - (number - 1) * rng.uniform(0.5, 1.5)
                                 + rng.gauss(0, 1)))
-            # The weaker arm sometimes stops one rep early
-            sides = {"left": reps, "right": reps - (rng.random() < 0.2)}
+            if exercise in WHOLE_BODY:
+                sides = {"both": reps}
+            else:  # the weaker arm sometimes stops one rep early
+                sides = {"left": reps, "right": reps - (rng.random() < 0.2)}
             for count in range(1, reps + 1):
                 t += timedelta(seconds=rng.uniform(2.0, 3.2) + count * 0.04)  # slower when tired
                 tired = count / reps

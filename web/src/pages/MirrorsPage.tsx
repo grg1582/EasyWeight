@@ -1,12 +1,27 @@
+import { Globe, MonitorSmartphone, QrCode, Sparkles, Terminal, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
-import type { DeviceCreated } from "../api/types";
+import type { Device, DeviceCreated } from "../api/types";
 import { useAddDevice, useDevices, useRemoveDevice } from "../api/queries";
 import { useAuth } from "../auth/AuthContext";
 import { EmptyState, ErrorNote, PageHeader, Spinner } from "../components/ui";
 import { formatAgo, formatDate } from "../lib/format";
+
+/** Sent something in the last 10 minutes: it's on */
+function Status({ device }: { device: Device }) {
+  const active =
+    device.last_seen_at !== null && Date.now() - new Date(device.last_seen_at).getTime() < 600_000;
+  return active ? (
+    <span className="pill bg-success/10 text-success">
+      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" />
+      Active
+    </span>
+  ) : (
+    <span className="pill bg-ink/5 text-muted">Idle</span>
+  );
+}
 
 function CopyBlock({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -73,7 +88,10 @@ function PairWithCode() {
         navigate(`/pair/${clean.toUpperCase()}`);
       }}
     >
-      <h2 className="font-semibold">Connect with a QR code</h2>
+      <h2 className="flex items-center gap-2 font-semibold">
+        <QrCode aria-hidden className="h-4 w-4 text-accent" />
+        Connect with a QR code
+      </h2>
       <p className="text-sm text-muted">
         On the mirror, run <code className="rounded bg-ink/5 px-1">python -m easyweight.pair</code>{" "}
         and scan the code it shows with your phone. Or type the code here:
@@ -127,7 +145,9 @@ export function MirrorsPage() {
           ) : devices.isError ? (
             <ErrorNote error={devices.error} onRetry={() => void devices.refetch()} />
           ) : devices.data.length === 0 ? (
-            <EmptyState title="No mirrors yet">Add your first mirror with the form.</EmptyState>
+            <EmptyState title="No mirrors yet" icon={MonitorSmartphone}>
+              Add your first mirror with the form, or scan its QR code.
+            </EmptyState>
           ) : (
             <ul className="card divide-y divide-line">
               {devices.data.map((d) => (
@@ -135,8 +155,19 @@ export function MirrorsPage() {
                   key={d.id}
                   className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
                 >
-                  <div>
-                    <div className="font-medium">{d.name}</div>
+                  <div className="flex min-w-0 items-center gap-4">
+                  <span className="icon-chip">
+                    {d.kind === "browser" ? (
+                      <Globe aria-hidden className="h-[18px] w-[18px]" />
+                    ) : (
+                      <MonitorSmartphone aria-hidden className="h-[18px] w-[18px]" />
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 font-medium">
+                      {d.name}
+                      <Status device={d} />
+                    </div>
                     <div className="text-sm text-muted">
                       {d.kind === "browser" && "Workouts from the Train page · "}
                       {d.last_seen_at
@@ -144,6 +175,7 @@ export function MirrorsPage() {
                         : "Hasn't sent anything yet"}
                       <span className="text-faint"> · added {formatDate(d.created_at)}</span>
                     </div>
+                  </div>
                   </div>
                   {!readOnly && (
                     <button
@@ -160,6 +192,7 @@ export function MirrorsPage() {
                         }
                       }}
                     >
+                      <Trash2 aria-hidden className="h-4 w-4" />
                       Remove
                     </button>
                   )}
@@ -170,8 +203,11 @@ export function MirrorsPage() {
         </div>
 
         {readOnly ? (
-          <aside className="card h-fit p-5 text-sm text-muted">
-            <h2 className="mb-2 font-semibold text-ink">This is the demo</h2>
+          <aside className="card h-fit border-accent/25 bg-accent/[0.04] p-5 text-sm text-muted">
+            <h2 className="mb-2 flex items-center gap-2 font-semibold text-ink">
+              <Sparkles aria-hidden className="h-4 w-4 text-accent" />
+              This is the demo
+            </h2>
             Its mirror sends made-up workouts. Create an account to connect your own mirror.
           </aside>
         ) : (
@@ -207,7 +243,10 @@ export function MirrorsPage() {
             </form>
             <PairWithCode />
             <div className="card p-5 text-sm text-muted">
-              <h2 className="mb-2 font-semibold text-ink">Or sign in on the mirror</h2>
+              <h2 className="mb-2 flex items-center gap-2 font-semibold text-ink">
+                <Terminal aria-hidden className="h-4 w-4 text-accent" />
+                Or sign in on the mirror
+              </h2>
               <p className="mb-3">Run this on the mirror, in the device folder:</p>
               <CopyBlock
                 label="Register command"

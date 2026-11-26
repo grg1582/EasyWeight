@@ -1,6 +1,6 @@
 // The shapes the backend sends. They mirror backend/easyweight_api/schemas.py
 
-export type Exercise = "curl" | "raise" | "press";
+export type Exercise = "curl" | "raise" | "press" | "squat" | "pushup";
 
 export interface TokenPair {
   access_token: string;

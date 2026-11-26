@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight, ListChecks } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 import { PAGE_SIZE, useDevices, useWorkouts } from "../api/queries";
@@ -53,7 +54,7 @@ export function WorkoutsPage() {
       ) : workouts.isError ? (
         <ErrorNote error={workouts.error} onRetry={() => void workouts.refetch()} />
       ) : workouts.data.items.length === 0 ? (
-        <EmptyState title="No workouts yet">
+        <EmptyState title="No workouts yet" icon={ListChecks}>
           Workouts appear here as soon as a mirror sends them.
         </EmptyState>
       ) : (
@@ -67,6 +68,7 @@ export function WorkoutsPage() {
                 disabled={page === 0}
                 onClick={() => update({ page: page > 1 ? String(page) : undefined })}
               >
+                <ChevronLeft aria-hidden className="h-4 w-4" />
                 Newer
               </button>
               <span className="text-muted">
@@ -79,6 +81,7 @@ export function WorkoutsPage() {
                 onClick={() => update({ page: String(page + 2) })}
               >
                 Older
+                <ChevronRight aria-hidden className="h-4 w-4" />
               </button>
             </nav>
           )}

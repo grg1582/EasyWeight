@@ -10,7 +10,7 @@ export function LiveBadge() {
       className="inline-flex items-center gap-1.5 text-xs font-medium text-muted"
       title={live ? "New workouts show up as they happen" : "Reconnecting to live updates"}
     >
-      <span className={`h-2 w-2 rounded-full ${live ? "bg-[#1baf7a]" : "bg-faint"}`} aria-hidden />
+      <span className={`h-2 w-2 rounded-full ${live ? "bg-success" : "bg-faint"}`} aria-hidden />
       {live ? "Live" : "Offline"}
     </span>
   );
@@ -21,11 +21,11 @@ export function TrainingNow() {
   const { activity } = useLive();
   if (!activity.length) return null;
   return (
-    <section className="card mb-6 p-5" aria-label="Training now">
+    <section className="card mb-6 border-success/30 p-5" aria-label="Training now">
       <h2 className="flex items-center gap-2 font-semibold">
         <span className="relative flex h-2.5 w-2.5" aria-hidden>
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#1baf7a] opacity-60" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#1baf7a]" />
+          <span className="absolute inline-flex h-full w-full rounded-full bg-success opacity-60 motion-safe:animate-ping" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-success" />
         </span>
         Training now
       </h2>

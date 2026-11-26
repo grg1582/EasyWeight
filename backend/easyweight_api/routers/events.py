@@ -6,7 +6,7 @@ from ..config import get_settings
 from ..db import get_db
 from ..demo import not_demo
 from ..ingest import ingest
-from ..live import publish_events
+from ..live_hub import publish_events
 from ..models import Device, User
 from ..schemas import EventBatch, EventBatchResult
 from ..security import current_device, hash_token, new_token
@@ -16,10 +16,14 @@ router = APIRouter(prefix="/api/v1/events", tags=["events"])
 BROWSER_NAME = "Web browser"
 
 
-def _check_size(body: EventBatch) -> None:
+def _accept(db: Session, device: Device, body: EventBatch) -> EventBatchResult:
+    """Save a device's events and push them to its owner's open dashboards"""
     limit = get_settings().max_events_per_request
     if len(body.events) > limit:
         raise HTTPException(413, f"Send at most {limit} events per request")
+    result = ingest(db, device, body.events)
+    publish_events(device, body.events, result.results)
+    return result
 
 
 @router.post("", response_model=EventBatchResult)
@@ -31,10 +35,7 @@ def send_events(
     """A mirror sends what happened, in order: workout_started, set_started,
     rep, set_ended, workout_ended. Each event gets its own result, and sending
     an event again is harmless (it comes back as "duplicate")"""
-    _check_size(body)
-    result = ingest(db, device, body.events)
-    publish_events(device, body.events, result.results)
-    return result
+    return _accept(db, device, body)
 
 
 def browser_device(db: Session, user: User) -> Device:
@@ -59,8 +60,4 @@ def send_browser_events(
 ):
     """The same events, from a workout done with the camera in the dashboard.
     They're saved under the user's "Web browser" device"""
-    _check_size(body)
-    device = browser_device(db, user)
-    result = ingest(db, device, body.events)
-    publish_events(device, body.events, result.results)
-    return result
+    return _accept(db, browser_device(db, user), body)
