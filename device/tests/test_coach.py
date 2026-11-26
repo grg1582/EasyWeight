@@ -1,10 +1,14 @@
 """The coach: feedback on partial and too fast reps, and on each set in the rest
 after it. The same cases as the
 browser's coach.test.ts"""
+import pytest
+
 from easyweight.coach import CUE_SECONDS, SLOW_TEXT, Coach
 from easyweight.counter import Workout
+from easyweight.engine import Engine
+from easyweight.exercises import EXERCISES
+from poses import FPS, HALF_SQUAT, SIZE, pushups, squats
 
-FPS = 30
 REP = [160, 120, 80, 40, 80, 120, 160]
 QUICK_REP = [170, 30, 30, 170, 170]  # held 3 frames each: half a second
 
@@ -108,3 +112,56 @@ def test_after_fast_reps_the_rest_asks_to_slow_down():
     workout, coach = Workout(), Coach()
     rest(workout, coach, play(workout, coach, QUICK_REP * 2, 0, hold=3))
     assert coach.summary(workout) == ("2 reps · 1 too fast", SLOW_TEXT)
+
+
+def session(*segments):
+    """Whole frames through the engine, with the coach watching. Returns the
+    engine, the coach and the time after the last frame"""
+    engine, coach = Engine(), Coach()
+    t = 0.0
+    for segment in segments:
+        for landmarks in segment:
+            engine.step(landmarks, SIZE, SIZE, t)
+            coach.observe(engine.workout, t)
+            t += 1 / FPS
+    return engine, coach, t
+
+
+def test_sagging_hips_in_pushups():
+    engine, coach, t = session(pushups(4, sag=0.1))
+    assert engine.workout.set_reps() == 4
+    assert coach.form == 4
+    assert coach.text(t - 1) == "Keep your body in a straight line"
+    t = rest(engine.workout, coach, t)
+    assert coach.summary(engine.workout) == (
+        "4 reps · 4 off form", "Next set: squeeze your glutes, body straight")
+
+
+def test_clean_pushups_get_a_tip():
+    engine, coach, t = session(pushups(4))
+    rest(engine.workout, coach, t)
+    assert coach.summary(engine.workout) == (
+        "Clean set: 4 reps", "Tip: elbows at 45°, not flared out")
+
+
+def test_a_half_squat_during_a_set():
+    engine, coach, t = session(squats(3), squats(1, depth=HALF_SQUAT)[12:])
+    assert engine.workout.set_reps() == 3
+    assert coach.partial == 1
+    assert coach.text(t) == "Squat deeper: thighs to parallel"
+
+
+def test_leaning_far_forward_in_squats():
+    engine, coach, t = session(squats(3, "side", lean=58))
+    assert engine.workout.set_reps() == 3
+    assert coach.form == 2  # the first two squats start the set together: one cue
+    assert coach.text(t - 1) == "Chest up"
+
+
+@pytest.mark.parametrize("exercise", list(EXERCISES))
+def test_every_exercise_has_its_texts(exercise):
+    text = EXERCISES[exercise]["text"]
+    assert text["partial"] and text["full_range"]
+    assert len(text["tips"]) == 3
+    # An exercise with a form check says something about it
+    assert bool(EXERCISES[exercise]["check"]) == bool(text["form"]) == bool(text["form_advice"])

@@ -19,10 +19,10 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
-from ..auth import access_claims
 from ..db import get_db
-from ..live import hub
+from ..live_hub import hub
 from ..models import User
+from ..user_auth import access_claims
 
 router = APIRouter(tags=["live"])
 

@@ -148,12 +148,16 @@ class Mirror:
     def end_workout(self):
         return self._event("workout_ended", workout_id=self.workout_id)
 
-    def full_set(self, exercise, reps, number=1):
+    def full_set(self, exercise, reps, number=1, side="left"):
         events = [self.start_set(exercise, number)]
-        events += [self.rep(i) for i in range(1, reps + 1)]
+        events += [self.rep(i, side=side) for i in range(1, reps + 1)]
         events.append(self.end_set(reps))
         self.wait(60)
         return events
+
+    def full_set_both(self, exercise, reps, number=1):
+        """A set of an exercise of the whole body (squats, push-ups)"""
+        return self.full_set(exercise, reps, number, side="both")
 
 
 @pytest.fixture

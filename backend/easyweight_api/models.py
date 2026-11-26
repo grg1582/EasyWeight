@@ -34,11 +34,20 @@ class Exercise(enum.StrEnum):
     curl = "curl"
     raise_ = "raise"
     press = "press"
+    squat = "squat"
+    pushup = "pushup"
 
 
 class Side(enum.StrEnum):
+    """Which arm a rep was, or "both" for an exercise of the whole body"""
+
     left = "left"
     right = "right"
+    both = "both"
+
+
+# Counted once for the whole body (side "both"), not arm by arm
+WHOLE_BODY = frozenset({Exercise.squat, Exercise.pushup})
 
 
 def _enum(cls, name):
@@ -131,14 +140,15 @@ class WorkoutSet(Base):
 
 
 class Rep(Base):
-    """One rep of one arm, kept for tempo and form analysis later"""
+    """One rep of one arm (or of the whole body, for squats and push-ups), kept
+    for tempo and form analysis later"""
 
     __tablename__ = "reps"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     set_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sets.id", ondelete="CASCADE"), index=True)
     side: Mapped[Side] = mapped_column(_enum(Side, "arm_side"))
-    count: Mapped[int] = mapped_column(Integer)  # this arm's rep count in the set
+    count: Mapped[int] = mapped_column(Integer)  # this arm's (or body's) rep count in the set
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     top: Mapped[float | None] = mapped_column(Float)  # top angle or height of the rep
 

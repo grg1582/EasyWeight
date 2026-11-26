@@ -26,5 +26,8 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     css: false,
+    // Node 25+ has a localStorage of its own, which hides jsdom's and is
+    // undefined unless given a file. Turn it off so the tests get jsdom's
+    execArgv: ["--no-experimental-webstorage"],
   },
 });

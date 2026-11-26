@@ -1,15 +1,25 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from ..auth import current_user
 from ..db import get_db
 from ..models import Device, User, Workout
 from ..schemas import SetOut, WorkoutDetail, WorkoutPage, WorkoutSummary
+from ..user_auth import current_user
 
 router = APIRouter(prefix="/api/v1/workouts", tags=["workouts"])
+
+
+def only_mine(query: Select, user: User, device_id: uuid.UUID | None = None) -> Select:
+    """Narrow a query of workouts (or of sets joined to their workout) to the
+    user's own, and to one of their devices if given. Every read of workouts
+    goes through here, so no endpoint can forget the owner check"""
+    query = query.join(Device).where(Device.owner_id == user.id)
+    if device_id:
+        query = query.where(Workout.device_id == device_id)
+    return query
 
 
 def _summary(workout: Workout) -> dict:
@@ -37,9 +47,7 @@ def list_workouts(
     db: Session = Depends(get_db),
 ):
     """The signed-in user's workouts, from all their mirrors or one, newest first"""
-    query = select(Workout).join(Device).where(Device.owner_id == user.id)
-    if device_id:
-        query = query.where(Workout.device_id == device_id)
+    query = only_mine(select(Workout), user, device_id)
     total = db.scalar(select(func.count()).select_from(query.subquery()))
     workouts = db.scalars(
         query.options(selectinload(Workout.sets))
@@ -56,9 +64,8 @@ def get_workout(workout_id: uuid.UUID, user: User = Depends(current_user),
     """One workout with its sets. Someone else's workout is "not found", so
     ids can't be probed"""
     workout = db.scalar(
-        select(Workout)
-        .join(Device)
-        .where(Workout.id == workout_id, Device.owner_id == user.id)
+        only_mine(select(Workout), user)
+        .where(Workout.id == workout_id)
         .options(selectinload(Workout.sets))
     )
     if workout is None:

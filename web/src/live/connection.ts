@@ -6,7 +6,7 @@
 // expired, otherwise after a growing wait (1, 2, 4 ... up to 30 seconds).
 
 import { accessTokenFor } from "../api/client";
-import type { Exercise, Side } from "../train/config";
+import type { CounterSide, Exercise } from "../train/config";
 
 export interface LiveDevice {
   id: string;
@@ -23,7 +23,7 @@ export type LiveEvent =
       at: string;
       data: { workout_id: string; set_id: string; exercise: Exercise; set_number: number };
     }
-  | { id: string; type: "rep"; at: string; data: { set_id: string; side: Side; count: number; top: number } }
+  | { id: string; type: "rep"; at: string; data: { set_id: string; side: CounterSide; count: number; top: number } }
   | { id: string; type: "set_ended"; at: string; data: { set_id: string; reps: number } }
   | { id: string; type: "workout_ended"; at: string; data: { workout_id: string } };
 

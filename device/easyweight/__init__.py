@@ -3,8 +3,9 @@
 The package is split by job, so each part can be used and tested on its own:
 
     config     tuning constants
+    exercises  the exercises as data: what is measured, where a rep starts and ends
     geometry   angles and distances from pose landmarks (pure Python)
-    counter    rep and set logic: ArmCounter and Workout (pure Python)
+    counter    rep and set logic: RepCounter and Workout (pure Python)
     engine     feeds one frame of landmarks into a Workout (pure Python)
     recording  saves and loads landmark recordings (pure Python)
     pose       MediaPipe pose model

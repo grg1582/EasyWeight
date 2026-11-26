@@ -2,7 +2,7 @@
 // device/easyweight/reporter.py. It compares the Workout with the last frame
 // after every step, so the counting logic doesn't know the backend exists.
 
-import { SIDES, type Exercise, type Side } from "./config";
+import type { CounterSide, Exercise } from "./config";
 import type { SetEntry, Workout } from "./counter";
 
 export type WorkoutEvent =
@@ -17,7 +17,8 @@ export type WorkoutEvent =
       id: string;
       type: "rep";
       at: string;
-      data: { set_id: string; side: Side; count: number; top: number | null };
+      // side "both" for exercises of the whole body (squats, push-ups)
+      data: { set_id: string; side: CounterSide; count: number; top: number | null };
     }
   | { id: string; type: "set_ended"; at: string; data: { set_id: string; reps: number } }
   | { id: string; type: "workout_ended"; at: string; data: { workout_id: string } };
@@ -30,7 +31,7 @@ export class Reporter {
   setId: string | null = null;
   private entry: SetEntry | null = null;
   private historyLength = 0;
-  private sideReps: Record<Side, number> = { left: 0, right: 0 };
+  private sideReps: Partial<Record<CounterSide, number>> = {};
   private setOpen = false;
   private lastReps = 0;
 
@@ -77,17 +78,18 @@ export class Reporter {
       });
       this.entry = entry;
       this.historyLength = history.length;
-      this.sideReps = { left: 0, right: 0 };
+      this.sideReps = {};
       this.setOpen = true;
     }
 
-    for (const side of SIDES) {
-      const counter = workout.counters[workout.exercise][side];
-      while (this.sideReps[side] < counter.reps) {
-        this.sideReps[side] += 1;
+    for (const [side, counter] of workout.countersOf(workout.exercise)) {
+      let reported = this.sideReps[side] ?? 0;
+      while (reported < counter.reps) {
+        reported += 1;
         const top = counter.angle === null ? null : Math.round(counter.angle * 1000) / 1000;
-        emit("rep", { set_id: this.setId!, side, count: this.sideReps[side], top });
+        emit("rep", { set_id: this.setId!, side, count: reported, top });
       }
+      this.sideReps[side] = reported;
     }
     this.lastReps = workout.setReps();
 

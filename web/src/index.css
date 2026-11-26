@@ -11,17 +11,22 @@
   --line: 225 224 217;
   --ink: 11 11 11;
   --muted: 82 81 78;
-  --faint: 137 135 129;
-  --accent: 42 120 214;
+  --faint: 112 110 104;
+  --accent: 37 99 196; /* 5.7:1 with white, 5.3:1 as text on the page */
+  --accent-strong: 37 99 196; /* button fills, in both themes */
   --accent-ink: 255 255 255;
   --danger: 200 54 54;
+  --success: 22 150 104;
 
   /* Chart colors, used by name in the charts */
+  --chart-total: #55606e; /* all exercises together: no exercise's color */
   --grid: #e1e0d9;
   --axis: #c3c2b7;
   --ex-curl: #2a78d6;
   --ex-raise: #eb6834;
   --ex-press: #1baf7a;
+  --ex-squat: #8a5cd1;
+  --ex-pushup: #c4407e;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -33,26 +38,48 @@
     --ink: 240 239 236;
     --muted: 195 194 183;
     --faint: 137 135 129;
-    --accent: 57 135 229;
+    --accent: 87 155 235; /* as text on the dark page */
+    --accent-strong: 37 99 196; /* white text on it stays readable */
     --accent-ink: 255 255 255;
     --danger: 230 103 103;
+    --success: 40 190 135;
 
+    --chart-total: #a3adba;
     --grid: #2c2c2a;
     --axis: #383835;
     --ex-curl: #3987e5;
     --ex-raise: #d95926;
     --ex-press: #199e70;
+    --ex-squat: #9a6ee3;
+    --ex-pushup: #d1588f;
   }
 }
 
-body {
-  @apply bg-page text-ink antialiased;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+@layer base {
+  body {
+    @apply bg-page font-sans text-ink antialiased;
+    font-feature-settings: "cv11"; /* Inter's single-story a */
+  }
+  /* A visible focus ring on everything you can tab to. Inputs draw their own */
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer components {
   .card {
-    @apply rounded-xl border border-line bg-surface;
+    @apply rounded-xl border border-line bg-surface shadow-card;
+  }
+  .card-hover {
+    @apply transition-[border-color,box-shadow] hover:border-ink/15 hover:shadow-card-hover;
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
@@ -60,10 +87,13 @@ body {
       focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply btn bg-accent text-accent-ink hover:bg-accent/90;
+    @apply btn bg-accent-strong text-accent-ink shadow-sm hover:bg-accent-strong/90;
   }
   .btn-ghost {
-    @apply btn border border-line text-ink hover:bg-ink/5;
+    @apply btn border border-line bg-surface text-ink hover:bg-ink/5;
+  }
+  .btn-lg {
+    @apply px-5 py-2.5 text-base;
   }
   .btn-danger {
     @apply btn border border-danger/40 text-danger hover:bg-danger/10;
@@ -75,6 +105,17 @@ body {
   }
   .label {
     @apply mb-1 block text-sm font-medium text-muted;
+  }
+  .link {
+    @apply rounded font-medium text-accent underline-offset-2 hover:underline;
+  }
+  /* A small rounded label: "In progress", "Active" */
+  .pill {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+  /* An icon in a soft square, beside a title */
+  .icon-chip {
+    @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent;
   }
   .tabular {
     font-variant-numeric: tabular-nums;

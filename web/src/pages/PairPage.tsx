@@ -1,3 +1,4 @@
+import { CheckCircle2, MonitorSmartphone, Sparkles } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -15,7 +16,8 @@ export function prettyCode(code: string): string {
  * page): connect that mirror to your account */
 export function PairPage() {
   const code = (useParams().code ?? "").replace(/[\s-]/g, "").toUpperCase();
-  const readOnly = useAuth().user?.is_demo ?? false;
+  const { user, signOut } = useAuth();
+  const readOnly = user?.is_demo ?? false;
   const claim = useClaimPairing();
   const [name, setName] = useState("");
 
@@ -31,6 +33,9 @@ export function PairPage() {
       <section className="card max-w-md p-6" aria-label="Connect a mirror">
         {device ? (
           <>
+            <span className="icon-chip mb-4 h-11 w-11 rounded-xl bg-success/10 text-success">
+              <CheckCircle2 aria-hidden className="h-5 w-5" />
+            </span>
             <h2 className="text-lg font-semibold">“{device.name}” is connected</h2>
             <p className="mt-2 text-sm text-muted">
               The mirror picks it up within a few seconds. Its workouts will show up on your
@@ -41,11 +46,23 @@ export function PairPage() {
             </Link>
           </>
         ) : readOnly ? (
-          <p className="text-sm text-muted">
-            This is the demo, which can't add mirrors. Create an account to connect yours.
-          </p>
+          <>
+            <span className="icon-chip mb-4 h-11 w-11 rounded-xl">
+              <Sparkles aria-hidden className="h-5 w-5" />
+            </span>
+            <h2 className="text-lg font-semibold">The demo can't add mirrors</h2>
+            <p className="mt-2 text-sm text-muted">
+              Create an account to connect yours. It takes a few seconds.
+            </p>
+            <button type="button" className="btn-primary mt-5" onClick={() => void signOut()}>
+              Create an account
+            </button>
+          </>
         ) : (
           <form onSubmit={submit} className="space-y-4">
+            <span className="icon-chip h-11 w-11 rounded-xl">
+              <MonitorSmartphone aria-hidden className="h-5 w-5" />
+            </span>
             <p className="text-sm text-muted">
               Check that the mirror shows this code, then connect it to your account.
             </p>

@@ -1,14 +1,70 @@
 """Feeds one video frame's pose landmarks into a Workout. Pure Python, so the
-live app, the replay tool and the tests all count reps the same way."""
+live app, the replay tool and the tests all count reps the same way.
+
+Every exercise in exercises.py is watched all the time, on each side it
+counts. What decides which one a set is happens in the Workout."""
 from . import config as cfg
 from .counter import Workout
-from .geometry import elbow_angle, joint_height, mouth_distance, shoulder_angle
+from .exercises import EXERCISES, sides_of
+from .geometry import joint_height, measure, measure_ids, mouth_distance, visibility
+
+# The order counters are fed in a frame: arm by arm, then the whole body ones
+ORDER = ([(e, side) for side in cfg.SIDES for e in EXERCISES if sides_of(e) == cfg.SIDES]
+         + [(e, "both") for e in EXERCISES if sides_of(e) == ("both",)])
+
+
+def _passes(value, condition, unseen):
+    """Whether a reading meets {"min": n} / {"max": n}. unseen when it's None"""
+    if value is None:
+        return unseen
+    return condition.get("min", -float("inf")) <= value <= condition.get("max", float("inf"))
 
 
 class Engine:
     def __init__(self):
         self.workout = Workout()
         self.last_seen = None  # time someone was last in front of the mirror
+        self.visible = []      # per landmark: seen well enough, with hysteresis
+
+    def _see(self, landmarks):
+        """A landmark is lost below MIN_VISIBILITY and found again only at
+        REGAIN_VISIBILITY, so one hovering around the line doesn't come and go"""
+        if not landmarks:
+            self.visible = []
+            return
+        before = self.visible or [False] * len(landmarks)
+        self.visible = [
+            lm.visibility is None or lm.visibility >= cfg.REGAIN_VISIBILITY
+            or (was and lm.visibility >= cfg.MIN_VISIBILITY)
+            for lm, was in zip(landmarks, before, strict=True)
+        ]
+
+    def _read(self, landmarks, spec, sides, width, height, agree=None):
+        """A measure on the given sides. With two: the average when they're within
+        agree of each other, otherwise the better seen side"""
+        values = []
+        for side in sides:
+            value = measure(landmarks, spec, side, width, height, self.visible)
+            if value is not None:
+                values.append((value, visibility(landmarks, measure_ids(spec, side))))
+        if not values:
+            return None
+        if len(values) == 2 and agree is not None and abs(values[0][0] - values[1][0]) <= agree:
+            return (values[0][0] + values[1][0]) / 2
+        return max(values, key=lambda v: v[1])[0]
+
+    def _blocked(self, now):
+        """The exercises that don't count now, because a squat is under way"""
+        blocked = set()
+        for exercise, spec in EXERCISES.items():
+            for counter in self.workout.counters[exercise].values():
+                if not (spec["blocks"] and counter.visible and counter.progress() > 0):
+                    continue
+                just_done = counter.rep_at is not None and \
+                    now - counter.rep_at < cfg.BLOCK_AFTER_REP_SECONDS
+                if counter.stage == "down" or just_done:
+                    blocked.update(spec["blocks"])
+        return blocked
 
     def step(self, landmarks, width, height, now):
         """Process one frame. landmarks is the list of 33 pose landmarks, or None
@@ -17,26 +73,33 @@ class Engine:
         workout = self.workout
         if self.last_seen is None:
             self.last_seen = now
+        self._see(landmarks)
         counted = False
+        blocked = self._blocked(now)
 
-        # Every exercise is watched on both arms. A raise must keep the elbow
-        # fairly straight, so a curl or a drink can't count as one, and stay
-        # below shoulder RAISE_MAX_ANGLE, so a press can't either
-        for side in cfg.ARMS:
-            elbow = elbow_angle(landmarks, side, width, height) if landmarks else None
-            shoulder = shoulder_angle(landmarks, side, width, height) if landmarks else None
-            wrist = joint_height(landmarks, side, 2, width, height) if landmarks else None
-            elbow_up = joint_height(landmarks, side, 1, width, height) if landmarks else None
-            mouth = mouth_distance(landmarks, side, width, height) if elbow is not None else None
-            raise_ok = (elbow is not None and elbow > cfg.RAISE_MIN_ELBOW
-                        and shoulder is not None and shoulder < cfg.RAISE_MAX_ANGLE)
-            for exercise, angle, form_ok in (("curl", elbow, True),
-                                             ("raise", shoulder, raise_ok),
-                                             ("press", wrist, True)):
-                counter = workout.counters[exercise][side]
-                if (counter.update(angle, mouth, form_ok, wrist, elbow_up)
-                        and workout.add_rep(now, exercise, counter)):
-                    counted = True
+        for exercise, side in ORDER:
+            spec = EXERCISES[exercise]
+            counter = workout.counters[exercise][side]
+            if not landmarks:
+                counter.update(None, now=now)
+                continue
+            sides = cfg.SIDES if side == "both" else (side,)
+            reading = self._read(landmarks, spec["measure"], sides, width, height, spec["agree"])
+            form_ok = exercise not in blocked and all(
+                _passes(self._read(landmarks, f["measure"], sides, width, height), f,
+                        unseen=f.get("unseen", False))
+                for f in spec["form"])
+            check = spec["check"]
+            check_ok = check is None or _passes(
+                self._read(landmarks, check["measure"], sides, width, height), check, unseen=True)
+            mouth = wrist = elbow = None
+            if side != "both" and reading is not None:
+                mouth = mouth_distance(landmarks, side, width, height, self.visible)
+                wrist = joint_height(landmarks, side, 2, width, height, self.visible)
+                elbow = joint_height(landmarks, side, 1, width, height, self.visible)
+            if (counter.update(reading, mouth, form_ok, wrist, elbow, now=now, check_ok=check_ok)
+                    and workout.add_rep(now, exercise, counter)):
+                counted = True
         if workout.check_pending(now):
             counted = True
 

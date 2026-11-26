@@ -38,6 +38,34 @@ def test_set_started_again_changes_the_exercise(client, send, mirror):
     assert [(s["exercise"], s["reps"]) for s in sets] == [("press", 2)]
 
 
+def test_squats_count_once_for_the_whole_body(client, send, mirror, db):
+    events = [mirror.start_workout(), mirror.start_set("squat")]
+    events += [mirror.rep(i, side="both", top=0.1) for i in range(1, 9)]
+    events += [mirror.end_set(8), mirror.end_workout()]
+    assert send(events)["applied"] == len(events)
+    sets = client.get(f"/api/v1/workouts/{mirror.workout_id}").json()["sets"]
+    assert [(s["exercise"], s["reps"]) for s in sets] == [("squat", 8)]
+    assert {r.side for r in db.query(Rep)} == {"both"}
+
+
+def test_pushups_are_an_exercise(client, send, mirror):
+    send([mirror.start_workout(), *mirror.full_set_both("pushup", 12)])
+    workout = client.get(f"/api/v1/workouts/{mirror.workout_id}").json()
+    assert workout["exercises"] == ["pushup"]
+    assert workout["total_reps"] == 12
+
+
+def test_a_rep_must_have_the_right_side(send, mirror):
+    send([mirror.start_workout(), mirror.start_set("squat")])
+    result = send([mirror.rep(1, side="left")])
+    assert result["rejected"] == 1
+    assert "squat rep has side both" in result["results"][0]["reason"]
+    send([mirror.start_set("curl")])  # a new set
+    result = send([mirror.rep(1, side="both")])
+    assert result["rejected"] == 1
+    assert "curl rep has side left or right" in result["results"][0]["reason"]
+
+
 def test_first_set_starts_the_workout(client, send, mirror):
     mirror.start_workout()  # made the workout id, but the event is never sent
     send(mirror.full_set("curl", 3))

@@ -9,7 +9,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from conftest import sign_up
 from easyweight_api.config import get_settings
-from easyweight_api.live import hub
+from easyweight_api.live_hub import hub
 
 
 def connect(client, token):

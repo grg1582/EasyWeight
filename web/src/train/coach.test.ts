@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { Coach, CUE_SECONDS, SLOW_TEXT } from "./coach";
 import { Workout } from "./counter";
+import { Engine } from "./engine";
+import { EXERCISES } from "./exercises";
+import { framesOf, parity } from "./parity";
 
 const FPS = 30;
 
@@ -9,7 +12,7 @@ const FPS = 30;
  * 40 = curled), holding each for a few frames, as the engine would */
 function play(workout: Workout, coach: Coach, angles: number[], start: number, hold = 6) {
   let t = start;
-  const counter = workout.counters.curl.left;
+  const counter = workout.counters.curl.left!;
   for (const angle of angles) {
     for (let i = 0; i < hold; i++) {
       if (counter.update(angle)) workout.addRep(t, "curl", counter);
@@ -118,5 +121,46 @@ describe("the coach after a set", () => {
     const coach = new Coach();
     rest(workout, coach, play(workout, coach, [...QUICK_REP, ...QUICK_REP], 0, 3));
     expect(coach.summary(workout)).toEqual(["2 reps · 1 too fast", SLOW_TEXT]);
+  });
+});
+
+/** A parity scenario through the engine, with the coach watching */
+function session(name: string) {
+  const engine = new Engine();
+  const coach = new Coach();
+  const fps = parity.scenarios[name]!.fps;
+  let t = 0;
+  for (const landmarks of framesOf(name)) {
+    engine.step(landmarks, parity.size, parity.size, t);
+    coach.observe(engine.workout, t);
+    t += 1 / fps;
+  }
+  return { workout: engine.workout, coach, t };
+}
+
+describe("the coach on whole body exercises", () => {
+  it("notices sagging hips in push-ups, and still counts them", () => {
+    const { workout, coach, t } = session("push-ups with sagging hips");
+    expect(workout.setReps()).toBe(6);
+    expect(coach.form).toBe(6);
+    expect(coach.text(t - 1)).toBe("Keep your body in a straight line");
+    rest(workout, coach, t);
+    expect(coach.summary(workout)).toEqual([
+      "6 reps · 6 off form",
+      "Next set: squeeze your glutes, body straight",
+    ]);
+  });
+
+  it("gives a push-up tip after clean push-ups", () => {
+    const { workout, coach, t } = session("push-ups");
+    rest(workout, coach, t);
+    expect(coach.summary(workout)).toEqual(["Clean set: 10 reps", "Tip: elbows at 45°, not flared out"]);
+  });
+
+  it("has texts for every exercise", () => {
+    for (const spec of Object.values(EXERCISES)) {
+      expect(spec.text.tips).toHaveLength(3);
+      expect(Boolean(spec.check)).toBe(Boolean(spec.text.form));
+    }
   });
 });

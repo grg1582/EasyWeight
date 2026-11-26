@@ -10,7 +10,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from .config import EXERCISES
+from .exercises import EXERCISES
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -96,7 +96,7 @@ def draw_hud(canvas, texts, workout, now, flash, cue=None, summary=None):
     add_text(texts, "EasyWeight", W - 40 * s, H * 0.07, 34 * s, CYAN, align="right")
 
     if workout.exercise:  # no name until the first rep shows which exercise it is
-        add_text(texts, EXERCISES[workout.exercise], cx, H * 0.07, 30 * s, LIGHT_GRAY)
+        add_text(texts, EXERCISES[workout.exercise]["label"], cx, H * 0.07, 30 * s, LIGHT_GRAY)
     if workout.resting(now):
         minutes, seconds = divmod(int(workout.rest_time(now)), 60)
         add_text(texts, f"{minutes}:{seconds:02d}", cx, H * 0.24, 190 * s, CYAN)

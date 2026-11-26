@@ -5,7 +5,10 @@
 
 import { describe, expect, it } from "vitest";
 
+import * as config from "./config";
+import { RepCounter, smoothingFactor, Workout } from "./counter";
 import { Engine } from "./engine";
+import { EXERCISES } from "./exercises";
 import { framesOf, parity } from "./parity";
 import { Reporter, type WorkoutEvent } from "./reporter";
 
@@ -15,11 +18,12 @@ function replay(name: string) {
   const reporter = new Reporter(undefined, () => `uuid-${++n}`);
   const events: WorkoutEvent[] = [];
   const counted: number[] = [];
+  const fps = parity.scenarios[name]!.fps;
   let t = parity.start;
   framesOf(name).forEach((landmarks, i) => {
     if (engine.step(landmarks, parity.size, parity.size, t)) counted.push(i);
     events.push(...reporter.observe(engine.workout, t));
-    t += 1 / parity.fps;
+    t += 1 / fps;
   });
   engine.reset();
   events.push(...reporter.observe(engine.workout, t));
@@ -64,6 +68,73 @@ describe("counts the same as the mirror", () => {
       });
     });
   }
+});
+
+describe("tuned the same as the mirror", () => {
+  it("has the same constants", () => {
+    const ours = config as unknown as Record<string, unknown>;
+    for (const [name, value] of Object.entries(parity.config)) expect(ours[name], name).toEqual(value);
+    // and no number of its own the mirror doesn't have
+    const numbers = Object.keys(ours).filter((k) => typeof ours[k] === "number");
+    expect(numbers.sort()).toEqual(Object.keys(parity.config).filter((k) => k !== "LANDMARKS").sort());
+  });
+
+  it("has the same exercises", () => {
+    expect(EXERCISES).toEqual(parity.exercises);
+  });
+});
+
+describe("the rep counter", () => {
+  const feed = (c: RepCounter, angles: number[]) => angles.filter((a) => c.update(a)).length;
+
+  it("reacts as fast at any frame rate", () => {
+    expect(smoothingFactor(1 / 30)).toBeCloseTo(0.4, 10);
+    expect(smoothingFactor(2 / 30)).toBeCloseTo(1 - 0.6 ** 2, 10);
+  });
+
+  it("drops a one frame spike completely", () => {
+    const c = new RepCounter(150, 50);
+    feed(c, Array(10).fill(170));
+    c.update(30);
+    expect(c.angle).toBeCloseTo(170, 10);
+  });
+
+  it("starts its smoothing over after a long gap, keeping the rep under way", () => {
+    const c = new RepCounter(150, 50);
+    for (let i = 0; i < 10; i++) c.update(170, null, true, i / 30);
+    c.update(100, null, true, 10 / 30 + 1);
+    expect(c.angle).toBe(100);
+    expect(c.stage).toBe("down");
+  });
+});
+
+describe("whole body exercises", () => {
+  it("have one counter, shown for both sides", () => {
+    const w = new Workout();
+    expect(Object.keys(w.counters.squat)).toEqual(["both"]);
+    w.exercise = "squat";
+    const [left, right] = w.arms();
+    expect(left).toBe(w.counters.squat.both);
+    expect(right).toBe(left);
+  });
+
+  it("start a squat set only on the second squat", () => {
+    const w = new Workout();
+    const squat = w.counters.squat.both!;
+    squat.reps = 1;
+    expect(w.addRep(0, "squat", squat)).toBe(false);
+    expect(w.history).toEqual([]);
+    squat.reps = 1;
+    expect(w.addRep(3, "squat", squat)).toBe(true);
+    expect(w.history).toEqual([{ exercise: "squat", set: 1, reps: 2 }]);
+  });
+
+  it("report each rep with side both", () => {
+    const { events } = replay("push-ups");
+    const reps = events.filter((e) => e.type === "rep");
+    expect(reps).toHaveLength(10);
+    expect(new Set(reps.map((e) => (e.data as { side: string }).side))).toEqual(new Set(["both"]));
+  });
 });
 
 describe("finishing a workout by hand", () => {

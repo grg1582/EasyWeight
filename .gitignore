@@ -26,3 +26,6 @@ web/public/mediapipe/
 web/test-results/
 web/playwright-report/
 *.tsbuildinfo
+
+# Claude Code worktrees
+.claude/worktrees/

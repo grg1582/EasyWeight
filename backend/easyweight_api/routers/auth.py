@@ -4,19 +4,20 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..auth import (
-    authenticate,
-    hash_password,
-    issue_tokens,
-    revoke_refresh_token,
-    rotate_refresh_token,
-)
 from ..config import get_settings
 from ..db import get_db
 from ..demo import demo_user
 from ..models import User
 from ..ratelimit import RateLimiter, client_address
 from ..schemas import RefreshRequest, TokenPair, UserCreate
+from ..user_auth import (
+    authenticate,
+    hash_password,
+    issue_tokens,
+    normalize_email,
+    revoke_refresh_token,
+    rotate_refresh_token,
+)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -29,7 +30,7 @@ signup_limit = RateLimiter(_settings.signups_per_hour, 3600)
 def register(body: UserCreate, request: Request, db: Session = Depends(get_db)):
     """Create an account. Signs in right away, so the answer is a token pair"""
     signup_limit.hit(client_address(request))
-    email = body.email.strip().lower()
+    email = normalize_email(body.email)
     taken = HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists")
     if db.scalar(select(User.id).where(User.email == email)):
         raise taken
@@ -49,7 +50,7 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(),
     """Sign in with email and password, sent as a form (the OAuth2 standard,
     which is what the Authorize button in /docs uses). The email goes in the
     `username` field. After 10 wrong tries in 5 minutes: 429, wait a bit"""
-    key = f"{client_address(request)}:{form.username.strip().lower()}"
+    key = f"{client_address(request)}:{normalize_email(form.username)}"
     login_limit.hit(key)
     user = authenticate(db, form.username, form.password)
     if user is None:

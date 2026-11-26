@@ -6,6 +6,7 @@ import type { Landmark } from "./geometry";
 export type Frame = [number, number, number | null][] | null;
 
 export interface Scenario {
+  fps: number; // frames a second
   frames: [number, Frame][]; // run length: [how many frames in a row, the frame]
   counted: number[]; // the frames that counted a rep
   history: { exercise: string; set: number; reps: number }[];
@@ -18,6 +19,8 @@ interface Parity {
   start: number;
   used: number[];
   filler: [number, number];
+  config: Record<string, unknown>; // the Python tuning constants
+  exercises: Record<string, unknown>; // and exercises
   scenarios: Record<string, Scenario>;
 }
 

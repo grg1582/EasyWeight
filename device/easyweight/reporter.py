@@ -6,7 +6,8 @@ so the counting logic doesn't need to know the backend exists:
     workout_started   the first set after a reset
     set_started       a new set, or the same set_id again when a 1 rep set
                       turns out to be another exercise
-    rep               one arm finished a rep
+    rep               one arm (side left or right) or the whole body (side
+                      both, for squats and push-ups) finished a rep
     set_ended         rest started, or the workout reset in the middle of a set
     workout_ended     the workout reset (person left, or rested too long)
 
@@ -15,8 +16,6 @@ Pure Python: the events are plain dicts, ready to be sent as JSON.
 import time
 import uuid
 from datetime import datetime, timezone
-
-from . import config as cfg
 
 
 def wall_clock():
@@ -35,7 +34,7 @@ class Reporter:
         self.set_id = None
         self._entry = None          # the history entry of the current set
         self._history_len = 0
-        self._side_reps = {}        # reps already reported, per arm
+        self._side_reps = {}        # reps already reported, per side
         self._set_open = False      # set_ended not sent yet
         self._last_reps = 0
 
@@ -70,11 +69,10 @@ class Reporter:
                  exercise=entry["exercise"], set_number=entry["set"])
             self._entry = entry
             self._history_len = len(history)
-            self._side_reps = dict.fromkeys(cfg.ARMS, 0)
+            self._side_reps = dict.fromkeys(workout.counters[entry["exercise"]], 0)
             self._set_open = True
 
-        for side in cfg.ARMS:
-            counter = workout.counters[workout.exercise][side]
+        for side, counter in workout.counters[workout.exercise].items():
             while self._side_reps[side] < counter.reps:
                 self._side_reps[side] += 1
                 top = None if counter.angle is None else round(counter.angle, 3)

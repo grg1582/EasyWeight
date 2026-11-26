@@ -21,7 +21,7 @@ The design choices to keep in mind before changing anything:
 - **The counting logic is pure.** It takes numbers (landmarks, time) and returns numbers. Only `pose.py`, `hud.py` and `app.py` touch the camera, OpenCV or MediaPipe, so everything else is tested without them.
 - **The mirror works offline.** Events go to a SQLite outbox first and are deleted only after the API answered for them. Never send events straight from the camera loop.
 - **Tokens are only stored as hashes.** Device tokens are SHA-256 hashed, passwords Argon2 hashed, and a mirror connected by QR code makes its own token and only ever sends the hash.
-- **Live updates are in-process.** `backend/easyweight_api/live.py` keeps the WebSocket subscribers in memory, which is right for one API process. Running several would need PostgreSQL `LISTEN/NOTIFY` or Redis.
+- **Live updates are in-process.** `backend/easyweight_api/live_hub.py` keeps the WebSocket subscribers in memory, which is right for one API process. Running several would need PostgreSQL `LISTEN/NOTIFY` or Redis.
 - **Users only see their own data.** Someone else's workout answers 404, not 403. Keep that true for any new endpoint.
 
 ## Project structure
@@ -53,8 +53,8 @@ EasyWeight/
 │   │   ├── models.py            # Database tables (SQLAlchemy)
 │   │   ├── schemas.py           # Request and response shapes (Pydantic)
 │   │   ├── ingest.py            # Applies events to workouts, sets and reps
-│   │   ├── live.py              # The hub behind live updates
-│   │   ├── auth.py              # Passwords, access and refresh tokens
+│   │   ├── live_hub.py          # The hub behind live updates
+│   │   ├── user_auth.py         # Passwords, access and refresh tokens
 │   │   ├── security.py          # Device tokens
 │   │   ├── ratelimit.py         # Limits sign-in and pairing attempts
 │   │   ├── demo.py              # The read-only demo account
