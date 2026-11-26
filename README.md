@@ -2,7 +2,9 @@
 
 # EasyWeight
 
-**A smart gym mirror that counts your reps.** A webcam and a pose model watch you train, recognize the exercise, count every rep, coach your form and time your rest, and the numbers float on the glass. Every rep reaches the cloud as it happens, and a web app shows your training live or turns any laptop or phone into the mirror.
+### A smart gym mirror that counts your reps, coaches your form and times your rest.
+
+Computer vision on a plain webcam · Live sync to the cloud · Runs in any browser
 
 [![Live demo](https://img.shields.io/badge/live_demo-easyweight.onrender.com-2a78d6)](https://easyweight.onrender.com)
 [![Mirror app](https://github.com/grg1582/EasyWeight/actions/workflows/device.yml/badge.svg)](https://github.com/grg1582/EasyWeight/actions/workflows/device.yml)
@@ -10,9 +12,15 @@
 [![Web](https://github.com/grg1582/EasyWeight/actions/workflows/web.yml/badge.svg)](https://github.com/grg1582/EasyWeight/actions/workflows/web.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
+**[Live demo](https://easyweight.onrender.com)** · **[How it works](#how-it-fits-together)** · **[Run it yourself](#run-it-yourself)** · **[Documentation](#documentation)** · **[Contributing](CONTRIBUTING.md)**
+
 </div>
 
 https://github.com/user-attachments/assets/cbb6c348-219c-41a6-bf49-df96ef5d7411
+
+## Overview
+
+EasyWeight turns a monitor behind a two-way mirror into a training partner. A webcam and a pose model recognize the exercise, count every rep, flag form problems and start a rest timer between sets, and the numbers appear on the glass. Every rep syncs to the cloud as it happens. The web app shows your training live, or turns any laptop or phone into the mirror.
 
 ## Try it
 
@@ -27,7 +35,7 @@ Open **[easyweight.onrender.com](https://easyweight.onrender.com)** and press **
   <img alt="The EasyWeight dashboard: reps per day, reps by exercise and recent workouts" src="Images/dashboard.png">
 </picture>
 
-## Highlights
+## Key features
 
 - **Computer vision that knows what you're doing.** MediaPipe pose landmarks become joint angles and heights, and a state machine counts reps of five exercises: curls, lateral raises and overhead presses arm by arm, squats and push-ups for the whole body. The first rep of a set decides the exercise, posture tells standing from lying down, 8 seconds of stillness starts a rest timer, and a sip of water during the rest isn't counted as a curl. Readings are steadied against jitter, frames where a joint is lost, different frame rates and standing side on. [How the counting works](docs/how-counting-works.md)
 - **Exercises are data, not code.** Each exercise is a definition of which joints to measure, where a rep starts and ends, the posture it needs and what the coach says. Adding one doesn't touch the counting logic.
